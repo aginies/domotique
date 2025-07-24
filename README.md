@@ -5,6 +5,9 @@
 * display all relevant informatiopn on a 0.96" oled screen (optionnal)
 * debug easily using color
 
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/devel.jpg)
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/portail_web.jpg)
+
 # Hardware
 
 * ESP32-S3or any ESP32 version but you need to adapt the script for PIN
