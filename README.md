@@ -28,7 +28,7 @@ Color information
 * pink: Relay
 * violet: Socket (port 80)
 
-After start, in case of error, the assigned color will blink one time very fast.
+After start, in case of error, the assigned color will blink.
 
 # Software
 
