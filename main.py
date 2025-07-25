@@ -10,13 +10,24 @@ from neopixel import NeoPixel
 
 # Main name of the stuff to control
 # As this will be used for WIFI name dont use space!
+# No more than 13 characters or you won't see it on the ssd1306
 DOOR = "Garage_Rouge"
+
+# CHOOSE AP OR EXISTING WIFI
+# E_WIFI is True you will use a existing Wifi
+# E_WIFI is False you will create a Wifi Access Point
+E_WIFI = False
 
 # WIFI AP
 AP_SSID = "W_" + DOOR
 AP_PASSWORD = '12345678'
 AP_IP = ('192.168.66.1', '255.255.255.0', '192.168.66.1', '192.168.66.1')
 HIDDEN_SSID = False # True
+
+# WIFI CLIENT
+# credentials
+WIFI_SSID = "YOURSSID"
+WIFI_PASSWORD = "YOURPWD"
 
 # INTERNAL LED (PIN 48)
 # on ESP32-S3 you must sold the RGB pin on the board!
@@ -26,10 +37,10 @@ np = NeoPixel(I_led, 1)
 # One color per function to find the root cause
 green = (0, 255 , 0) # OLED display
 red = (255, 0, 0) # error?
-blue = (0, 0, 255) # setup access point
+blue = (0, 0, 255) # setup Wifi access point
 violet = (154, 14, 234) # socket bind to address
 pink = (255, 192, 203) # relay (web button to control motor)
-white = (255, 255, 255) # white
+white = (255, 255, 255) # connect to existing Wifi
 led_off = (0, 0, 0)
 # Time in second
 time_ok = 0.1
@@ -46,12 +57,14 @@ door_state = door_sensor.value()
 prev_door_state = door_state
 
 # RELAY for BP1 and BP2
+# Be sure to put max power to the pin to control the relay
 last_ctrl_relay_time = 0
 RELAY1_PIN = 15
-relay1 = Pin(RELAY1_PIN, Pin.OUT) #, drive=Pin.DRIVE_3)
-
+relay1 = Pin(RELAY1_PIN, Pin.OUT, drive=Pin.DRIVE_3)
+relay1.off()
 RELAY2_PIN = 16
-relay2 = Pin(RELAY2_PIN, Pin.OUT)
+relay2 = Pin(RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
+relay2.off()
 
 # ESP32 Pin assignment OLED
 i2c = SoftI2C(scl=Pin(36), sda=Pin(21))
@@ -59,8 +72,8 @@ oled_width = 128
 oled_height = 64
 
 def internal_led_blink(color1, color2, NB, timing):
-    """ rules is: blink 3 times for OK, 5 times for Error"""
-    for l in (range(0, NB)):  
+    """ rules is: blink 3 times for OK, 5 times for Error/NOK"""
+    for _ in (range(0, NB)):  
         np[0] = color1
         np.write()
         utime.sleep(timing)
@@ -68,6 +81,12 @@ def internal_led_blink(color1, color2, NB, timing):
         np.write()
         utime.sleep(timing)
         internal_led_off()
+
+def french_flag():
+    times = 0.8
+    internal_led_blink(blue, white, 1, times)
+    np[0] = red; np.write(); utime.sleep(times)
+    internal_led_off()
 
 def internal_led_color(color):
     """ easy way to change the color led """
@@ -91,8 +110,10 @@ def check_and_display_error():
         internal_led_blink(violet, led_off, 1, 0.1)
     if ERR_OLED is True:
         internal_led_blink(green, led_off, 1, 0.1)
-    if ERR_WIFI_APP is True:
+    if ERR_WIFI is True:
         internal_led_blink(blue, led_off, 1, 0.1)
+    if ERR_CON_WIFI is True:
+        internal_led_blink(white, led_off, 1, 0.1)
     if ERR_CTRL_RELAY is True:
         internal_led_blink(pink, led_off, 1, 0.1)
 
@@ -102,6 +123,7 @@ def initialize_oled():
         oled_d = ssd1306.SSD1306_I2C(oled_width, oled_height, i2c)
         print("Ecran OLED Ok")
         internal_led_blink(green, led_off, 3, time_ok)
+        oled_d.fill(0)
         return oled_d
     except OSError as err:
         print(f"Ecran OLED NOK: {err}")
@@ -123,15 +145,19 @@ def oled_constant_show():
         mcu_t = esp32.mcu_temperature()
         temp_mcu = "Temp ESP32: " + str(mcu_t) + "C"
         oled_d.fill(0)
-        if ERR_SOCKET is False and ERR_WIFI_APP is False:
+        SSID = AP_SSID
+        if E_WIFI is True:
+            if ERR_CON_WIFI is False:
+                SSID = WIFI_SSID
+        if ERR_SOCKET is False and ERR_WIFI is False:
             oled_d.text("Wifi SSID:", 0, 0)
-            oled_d.text(AP_SSID, 0, 10)
+            oled_d.text(SSID, 0, 10)
             oled_d.text("Wifi IP AP:", 0, 20)
-            oled_d.text(AP_IP[0], 0, 30)
+            oled_d.text(IP_ADDR, 0, 30)
         else:
             oled_d.text(" ! Warning !", 0, 0)
-            oled_d.text("No Wifi Access", 0, 10)
-            oled_d.text("Point Available!", 0, 20)
+            oled_d.text(" Wifi is Not", 0, 10)
+            oled_d.text(" Ready!", 0, 20)
             oled_d.text("Mode degrade!", 0, 30)
         oled_d.text(temp_mcu, 0, 40)
         oled_d.text(statusd, 0, 50)
@@ -146,6 +172,39 @@ def deactivate_active_interfaces():
     if ap_if.active():
         ap_if.active(False)
 
+def connect_to_wifi():
+    sta_if = network.WLAN(network.STA_IF)
+    if not sta_if.active():
+        sta_if.active(True)
+    
+    max_attempts = 5
+    attempt = 0
+    try:
+        sta_if.connect(WIFI_SSID, WIFI_PASSWORD)
+    except OSError as err:
+        print(err)
+    while not sta_if.isconnected() and attempt < max_attempts:
+        attempt += 1
+        info = "Trying Wifi "+str(attempt)+"/"+str(max_attempts)
+        print(info)
+        oled_d.fill(0)
+        oled_show_text_line(info, 10)
+        utime.sleep(2)
+    
+    oled_d.fill(1)
+    oled_d.fill(0)
+    if sta_if.isconnected():
+        print("Connecte au WiFi OK")
+        print("Network config:", sta_if.ifconfig())
+        internal_led_blink(white, led_off, 3, time_ok)
+        return {'success': True, 'ip_address': sta_if.ifconfig()[0]}
+    else:
+        print("Connecte au WiFi NOK!")
+        internal_led_blink(white, led_off, 5, time_err)
+        ERR_WIFI = True
+        print("Force using WIFI AP")
+        return {'success': False, 'ERR_WIFI': ERR_WIFI}
+    
 def setup_access_point():
     """ Configurer le point d'accès """
     deactivate_active_interfaces()
@@ -159,17 +218,22 @@ def setup_access_point():
                   password=AP_PASSWORD,
                   hidden=HIDDEN_SSID,
                   channel=6)
-    
-        while not ap.active():
-            print(f"Activation de l'accès point WIFI...")
-            utime.sleep(1)
-    
+        max_attempts = 5
+        attempt = 0
+        while not ap.active() and attempt < max_attempts:
+            attempt += 1
+            info = "Trying AP Wifi "+str(attempt)+"/"+str(max_attempts)
+            print(info)
+            oled_d.fill(0)
+            oled_show_text_line(info, 10)
+            utime.sleep(2)
+
         print('Point d\'accès WIFI créé avec l\'adresse IP:', ap.ifconfig()[0])
-        oled_show_text_line("AP Wifi Ok", 0)
+        #oled_show_text_line("AP Wifi Ok", 0)
         internal_led_blink(blue, led_off, 3, time_ok)
         return ap
     except OSError as err:
-        oled_show_text_line("AP Wifi NOK", 0)
+        #oled_show_text_line("AP Wifi NOK", 0)
         internal_led_blink(blue, led_off, 5, time_err)
 
 def ctrl_relay(which_one):
@@ -177,13 +241,13 @@ def ctrl_relay(which_one):
     try:
         internal_led_blink(pink, led_off, 3, time_ok)
         if which_one == 1:
-            relay1.value(1)
-            utime.sleep(2)
-            relay1.value(0)
-        else:
-            relay2.value(1)
+            relay1.on()
             utime.sleep(0.2)
-            relay2.value(0)
+            relay1.off()
+        else:
+            relay2.on()
+            utime.sleep(0.2)
+            relay2.off()
     except OSError as err:
         print(err)
         relay1.value(0)
@@ -217,14 +281,19 @@ def handle_request(request):
     global last_ctrl_relay_time
     current_time = utime.time()
     if b'/BP1_ACTIF' in request:
-        if current_time - last_ctrl_relay_time > 10:
+        if current_time - last_ctrl_relay_time > 3:
             print("BP1 activé")
             ctrl_relay(1)
             last_ctrl_relay_time = current_time
         else:
-            print("Duplicate request seen...")
+            print("BP1 Duplicate request seen...")
     elif b'/BP2_ACTIF' in request:
-        print("BP2 activé")
+        if current_time - last_ctrl_relay_time > 3:
+            print("BP2 activé")
+            ctrl_relay(1)
+            last_ctrl_relay_time = current_time
+        else:
+            print("BP2 Duplicate request seen...")
         ctrl_relay(2)
         
 def create_html_response():
@@ -301,6 +370,7 @@ def create_html_response():
         <h1>Contrôle """ + DOOR + """</h1>
         <p>Toujours <b>contrôler</b> visuellement le <b>""" + DOOR + """</b></p>
         <a href="/BP1_ACTIF"><button class="button">BP1</button></a>
+        <!--<a href="/BP2_ACTIF">-->
         <button class="button" disabled>BP2</button></a>
     </div>
     <div class="footer">
@@ -310,35 +380,64 @@ def create_html_response():
 </html>"""
     return html
 
+def start_WIFI_ap():
+    ap = setup_access_point()
+    if ap:
+        ERR_WIFI = False
+    else:
+        ERR_WIFI = True
+    return ap, ERR_WIFI
+
 def main():
     """ The Main one ! """
     global door_state
     global statusd
     sock = None
     global oled_d
+    global IP_ADDR
+    ap = None
     # ERR_* are used to display LED color in case of...
-    global ERR_SOCKET, ERR_OLED, ERR_WIFI_APP, ERR_CTRL_RELAY
+    global ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
     ERR_SOCKET = False
     ERR_OLED = False
-    ERR_WIFI_APP = False
+    ERR_WIFI = False
     ERR_CTRL_RELAY = False
+    ERR_CON_WIFI = False
     
     oled_d = initialize_oled()
     # Start up info
-    info_start = "Démarrage du Sys..."
+    info_start = "Starting System"
     print(info_start)
     if oled_d:
         oled_d.text(info_start, 0, 0)
-        info_control = "Control " + DOOR 
-        oled_d.text(info_control, 0, 40)
-        oled_d.text('Antoine', 0, 40)
-        oled_d.text('guibo.com', 0, 50)
+        info_control = "Door Control V0.9" 
+        oled_d.text(info_control, 0, 10)
+        oled_d.text('https://github.c', 0, 20)
+        oled_d.text('om/aginies/domot', 0, 30)
+        oled_d.text('ique', 0, 40)
+        oled_d.text('ag@ginies.org', 0, 50)
         oled_d.show()
-        utime.sleep(0.5)
+        utime.sleep(2)
     if oled_d:
         oled_d.fill(0)
-    ap = setup_access_point()
-    #ap = None
+
+    if E_WIFI is False:
+        ap, ERR_WIFI = start_WIFI_ap()
+        IP_ADDR = AP_IP[0]
+    else:
+        result_con_wifi = connect_to_wifi()
+        if result_con_wifi['success']:
+            IP_ADDR = result_con_wifi['ip_address']
+        else:
+            # Failed to connect to External Wifi
+            # STarting the Wifi AP
+            ERR_CON_WIFI = True
+            ap, ERR_WIFI = start_WIFI_ap()
+            if ap:
+                oled_show_text_line("AP Wifi Ok", 0)
+                IP_ADDR = AP_IP[0]
+            else:
+                oled_show_text_line("AP Wifi NOK!", 0)
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
     print(f"Information sur {DOOR}:")
@@ -352,8 +451,9 @@ def main():
     print(statusd)        
     oled_show_text_line(statusd, 10)
 
-    if ap:
-        addr = socket.getaddrinfo('192.168.66.1', 80)[0][-1]
+    #if ap:
+    if IP_ADDR and IP_ADDR != '0.0.0.0':
+        addr = socket.getaddrinfo(IP_ADDR, 80)[0][-1]
         sock = socket.socket()
         try:
             sock.bind(addr)
@@ -369,13 +469,17 @@ def main():
             oled_show_text_line("Socket :80 NOK!", 20)
             internal_led_blink(violet, led_off, 5, time_err)
             ERR_SOCKET = True
-
     else:
-        print('Problem Setting Up WIFI AP')
+        print('Problem With WIFI')
         oled_show_text_line("WIFI AP NOK!", 30)
-        ERR_WIFI_APP = True
+        ERR_WIFI = True
         internal_led_blink(blue, led_off, 5, time_err)
-        
+    
+    # We are ready
+    error_vars = ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
+    if all(not error for error in error_vars):
+        print("System OK, pas d'erreur")
+        french_flag()
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
@@ -395,7 +499,7 @@ def main():
 
         oled_constant_show()
         
-        if ap and sock:
+        if sock:
             handle_client_connection(sock, AP_IP[0])
         
         utime.sleep(0.1)
