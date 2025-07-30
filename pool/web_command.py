@@ -8,10 +8,14 @@ def create_html_response():
     disabled1 = "disabled" if bp1_exists else ""
     bp2_exists = d_u.file_exists('/BP2')
     disabled2 = "disabled" if bp2_exists else ""
+    emergency_exists = d_u.file_exists("/EMERGENCY_STOP")
+    disabled3 = "disabled" if emergency_exists else ""
     button_style1 = "style='background-color: grey; cursor: not-allowed;'" if bp1_exists else ""
     button_style2 = "style='background-color: grey; cursor: not-allowed;'" if bp2_exists else ""
+    button_style3 = "style='background-color: grey; cursor: not-allowed;'" if emergency_exists else ""
     style_attribute1 = f'style="{button_style1}"' if button_style1 else ""
     style_attribute2 = f'style="{button_style2}"' if button_style2 else ""
+    style_attribute3 = f'style="{button_style3}"' if button_style3 else ""
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -95,6 +99,10 @@ def create_html_response():
         .emergency-button:hover {{
             background-color: #C82333;
         }}
+        .emergency-button:disabled {{
+            background-color: grey;
+            cursor: not-allowed;
+        }}
         .reboot-message {{
             margin-top: 25px;
             padding: 15px 20px;
@@ -156,9 +164,9 @@ def create_html_response():
         <div id="progressBarContainer" class="progress-container">
             <div id="progressBar" class="progress-bar">0%</div>
         </div>
-        <button id="BP1" class="button" {disabled1} {button_style1}">{c_v.nom_bp1}</button>
-        <button id="BP2" class="button" {disabled2} {button_style2}">{c_v.nom_bp2}</button>
-        <button id="emergencyStop" class="emergency-button">Arrêt d'Urgence</button>
+        <button id="BP1" class="button" {disabled1} {button_style1}>{c_v.nom_bp1}</button>
+        <button id="BP2" class="button" {disabled2} {button_style2}>{c_v.nom_bp2}</button>
+        <button id="emergencyStop" class="emergency-button" {disabled3} {button_style3}>Arrêt d'Urgence</button>
         <!--<div id="timestamp"></div>-->
         <div id="rebootMessage" class="reboot-message">
             Le dispositif nécessite un redémarrage !
@@ -172,32 +180,31 @@ def create_html_response():
     document.addEventListener('DOMContentLoaded', function() {{
         const TIME_TO_OPEN_MS = {c_v.time_to_open} * 1000; // Convert to milliseconds
         const TIME_TO_CLOSE_MS = {c_v.time_to_close} * 1000; // Convert to milliseconds
-        
         let currentProgressBarInterval = null; // To manage active animation
         const progressBarContainer = document.getElementById('progressBarContainer');
         const progressBar = document.getElementById('progressBar');
         const rebootMessageDiv = document.getElementById('rebootMessage');
         const emergencyButton = document.getElementById('emergencyStop');
-
-        // --- Initial setup: Show progress bar at 100% ---
+        const bp1Button = document.getElementById('BP1');
+        const bp2Button = document.getElementById('BP2');
+        let emergencyActiveClient = false; 
+        // Show progress bar at 100% as the curtain is closed
         progressBar.style.width = '100%';
         progressBar.textContent = '100%';
         //rebootMessageDiv.style.display = 'none';
 
         // --- Progress Bar Animation Function ---
         function animateProgressBar(durationMs, startPercent, endPercent) {{
-            // Clear any ongoing animation
             if (currentProgressBarInterval) {{
                 clearInterval(currentProgressBarInterval);
             }}
             const startTime = Date.now();
-            let lastRenderedPercent = startPercent; // Keep track of the last percentage rendered
+            let lastRenderedPercent = startPercent;
 
             // Function to update the bar
             const updateBar = () => {{
                 const elapsedTime = Date.now() - startTime;
                 let progressFraction = Math.min(elapsedTime / durationMs, 1); // Clamp between 0 and 1
-
                 let currentPercent;
                 if (startPercent < endPercent) {{ // Increasing (e.g., 0 to 100)
                     currentPercent = startPercent + (endPercent - startPercent) * progressFraction;
@@ -211,7 +218,6 @@ def create_html_response():
                     progressBar.textContent = currentPercent.toFixed(0) + '%';
                     lastRenderedPercent = currentPercent;
                 }}
-
                 if (progressFraction >= 1) {{
                     clearInterval(currentProgressBarInterval);
                     currentProgressBarInterval = null; // Reset the interval variable
@@ -220,14 +226,12 @@ def create_html_response():
                     progressBar.textContent = endPercent.toFixed(0) + '%';
                 }}
             }};
-
             // If duration is 0, just jump to end state instantly
             if (durationMs === 0) {{
                 updateBar(); // Call once to set the final state
                 return;
             }}
-
-            currentProgressBarInterval = setInterval(updateBar, 50); // Update every 50 milliseconds
+            currentProgressBarInterval = setInterval(updateBar, 50);
         }}
 
         // --- Status Update Function (for buttons) ---
@@ -236,37 +240,46 @@ def create_html_response():
             .then(response => response.json())
             .then(data => {{
                 console.log("Status update:", data);
-                const bp1Button = document.getElementById('BP1');
-                const bp2Button = document.getElementById('BP2');
-                const statusBP1 = document.getElementById('statusBP1');
-                const statusBP2 = document.getElementById('statusBP2');
-
-                // Update BP1 button state
-                if (data.BP1_active) {{
-                    bp1Button.disabled = true;
-                    bp1Button.style.backgroundColor = 'grey';
-                }} else {{
-                    bp1Button.disabled = false;
-                    bp1Button.style.backgroundColor = '#007BFF';
-                }}
-
-                // Update BP2 button state
-                if (data.BP2_active) {{
-                    bp2Button.disabled = true;
-                    bp2Button.style.backgroundColor = 'grey';
-                }} else {{
-                    bp2Button.disabled = false;
-                    bp2Button.style.backgroundColor = '#007BFF';
-                }}
+                emergencyActiveClient = data.Emergency_stop;
                 if (data.Emergency_stop) {{
                     rebootMessageDiv.style.display = 'block';
-                    // Optionally disable BP1/BP2 if emergency is active and needs reboot
+                    // Disable all control buttons if emergency is active
                     bp1Button.disabled = true;
                     bp1Button.style.backgroundColor = 'grey';
                     bp2Button.disabled = true;
-                    bp2Button.style.backgroundColor = 'grey'
+                    bp2Button.style.backgroundColor = 'grey';
+                    emergencyButton.disabled = true;
+                    emergencyButton.style.backgroundColor = 'grey';
+                    // Stop any ongoing animation
+                    if (currentProgressBarInterval) {{
+                        clearInterval(currentProgressBarInterval);
+                        currentProgressBarInterval = null;
+                    }}
                 }} else {{
                     rebootMessageDiv.style.display = 'none';
+                    emergencyButton.disabled = false;
+                    emergencyButton.style.backgroundColor = '#DC3545';
+
+                    // Re-enable/disable BP1/BP2 based on their individual active states
+                    if (data.BP1_active) {{
+                        bp1Button.disabled = true;
+                        bp1Button.style.backgroundColor = 'grey';
+                        bp2Button.disabled = false; // BP2 can be active if BP1 is active
+                        bp2Button.style.backgroundColor = '#007BFF';
+                    }} else if (data.BP2_active) {{
+                        bp2Button.disabled = true;
+                        bp2Button.style.backgroundColor = 'grey';
+                        bp1Button.disabled = false; // BP1 can be active if BP2 is active
+                        bp1Button.style.backgroundColor = '#007BFF';
+                    }} else {{
+                        // If neither BP1 nor BP2 is active, enable both.
+                        // You might want a default state here, e.g., only BP1 enabled.
+                        // Assuming you want BP1 to start the sequence if nothing is active.
+                        bp1Button.disabled = false;
+                        bp1Button.style.backgroundColor = '#007BFF';
+                        bp2Button.disabled = true; // Typically, only one is active at a time, or BP1 initiates
+                        bp2Button.style.backgroundColor = 'grey';
+                    }}
                 }}
             }})
             .catch(error => console.error('Error fetching status:', error));
@@ -289,7 +302,12 @@ def create_html_response():
             }} else if (buttonId === 'BP2') {{
                 animateProgressBar(TIME_TO_CLOSE_MS, 0, 100); // Animate from 0% up to 100%
             }}
-
+            
+            // Immediately disable buttons to prevent double clicks and reflect current action
+            bp1Button.disabled = true;
+            bp1Button.style.backgroundColor = 'grey';
+            bp2Button.disabled = true;
+            bp2Button.style.backgroundColor = 'grey';
             fetch(endpoint, {{
                 method: 'POST'
             }})
@@ -314,19 +332,26 @@ def create_html_response():
                 if (button) {{
                     button.classList.remove('clicked');
                 }}
+                updateStatus(); 
             }});
         }}
         // --- Handle Emergency Stop Function ---
         function handleEmergencyStop() {{
             console.log("Emergency Stop button clicked!");
-            // 1. Stop the progress bar animation
+            emergencyActiveClient = true;
+            rebootMessageDiv.style.display = 'block';
+            bp1Button.disabled = true;
+            bp1Button.style.backgroundColor = 'grey';
+            bp2Button.disabled = true;
+            bp2Button.style.backgroundColor = 'grey';
+            emergencyButton.disabled = true;
+            emergencyButton.style.backgroundColor = 'grey';
             if (currentProgressBarInterval) {{
                 clearInterval(currentProgressBarInterval);
                 currentProgressBarInterval = null; // Clear the interval ID
                 // The progress bar will remain at its current position
             }}
 
-            // 2. Send command to backend to stop the physical process
             fetch('/EMERGENCY_STOP', {{
                 method: 'POST'
             }})
@@ -343,6 +368,8 @@ def create_html_response():
             }})
             .catch(error => {{
                 console.error('Error sending emergency stop command:', error);
+                emergencyActiveClient = false; // Revert client-side flag if backend failed
+                updateStatus(); // Attempt to resynchronize
             }});
         }}
         // --- Event Listeners ---
@@ -352,14 +379,14 @@ def create_html_response():
         document.getElementById('BP2').addEventListener('click', function() {{
             handleButtonClick('BP2', '/BP2_ACTIF');
         }});
-        document.getElementById('CONFIG').addEventListener('click', function() {{
+        document.getElementById('CONFIG').addEventListener('click', function(event) {{
+            console.log("Config button clicked!");
             handleButtonClick('CONFIG', '/CONFIG');
             window.location.href = '/CONFIG';
         }});
         document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
-        // --- Initial Calls ---
         updateStatus(); // Initial button status update
-        setInterval(updateStatus, 3000); // Poll for status updates
+        setInterval(updateStatus, 1500);
     }}); // End of DOMContentLoaded listener
     </script>
 </body>

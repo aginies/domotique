@@ -195,7 +195,6 @@ def handle_request(cl, request):
     if b'/BP1_ACTIF' in request:
         if current_time - last_ctrl_relay_time > 3:
             print("BP1 activé")
-            _thread.start_new_thread(ctrl_relay, (1,))
             last_ctrl_relay_time = current_time
             with open('/BP1', 'w') as file:
                 file.write('This file was created by clicking BP1.')
@@ -203,6 +202,7 @@ def handle_request(cl, request):
                 os.remove("/BP2")
             except OSError:
                 pass # BP2 might not exist
+            _thread.start_new_thread(ctrl_relay, (1,))
             response_content = "BP1 activated"
         else:
             print("BP1 Duplicate request seen...")
@@ -212,7 +212,6 @@ def handle_request(cl, request):
     elif b'/BP2_ACTIF' in request:
         if current_time - last_ctrl_relay_time > 3:
             print("BP2 activé")
-            _thread.start_new_thread(ctrl_relay, (2,))
             last_ctrl_relay_time = current_time
             with open('/BP2', 'w') as file:
                 file.write('This file was created by clicking BP2.')
@@ -220,6 +219,7 @@ def handle_request(cl, request):
                 os.remove("/BP1")
             except OSError:
                 pass # BP1 might not exist
+            _thread.start_new_thread(ctrl_relay, (2,))
             response_content = "BP2 activated"
         else:
             print("BP2 Duplicate request seen...")
@@ -256,16 +256,31 @@ def handle_request(cl, request):
             }
         response_content = ujson.dumps(status_data)
         content_type = "application/json"
-
     elif b'/CONFIG' in request:
         response_content = w_c.serve_config_page()
         content_type = "text/html"
+    elif request.startswith('GET /save_config'):
+        response_content = w_c.serve_config_page()
     elif request.startswith('POST /save_config'):
         print(request)
-        response_content = w_c.save_configuration(request)
-        content_type = "text/html"
+        response_from_save_config = w_c.save_configuration(request)
+        # Check if the returned value is a redirect response
+        if response_from_save_config.startswith("HTTP/1.1 30"):
+            # If it's a redirect, send it directly and RETURN
+            cl.sendall(response_from_save_config.encode('utf-8'))
+            cl.close()
+            return
+        else:
+            # If save_configuration returns regular content (e.g., an error message)
+            response_content = response_from_save_config
+            # status_code and content_type remain default (200 OK, text/html)
+            # unless save_configuration explicitly sets them for non-redirect paths
+#    else:
+#      # Handle other requests or 404 Not Found
+#        status_code = "404 Not Found"
+#        response_content = "<h1>404 Not Found</h1><p>The requested URL was not found on this server.</p>"
+#        content_type = "text/html"
     else:
-        # default is the main web command page
         response_content = w_cmd.create_html_response()
         content_type = "text/html"
 

@@ -24,14 +24,6 @@ config = {
     "time_err": config_var.time_err
 }
 
-def save_config(new_config):
-    with open('config_var.py', 'w') as f:
-        for key, value in new_config.items():
-            if isinstance(value, str):
-                f.write(f'{key} = "{value}"\n')
-            else:
-                f.write(f'{key} = {value}\n')
-
 def serve_config_page():
     html = """
 <!DOCTYPE html>
@@ -105,7 +97,7 @@ def serve_config_page():
 <body>
     <div class="form-container">
         <h1>Configuration pour la {DOOR}</h1>
-        <form action="/save_config" method="post">
+        <form id="configForm" action="/save_config" method="post">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
@@ -193,27 +185,112 @@ def serve_config_page():
                     <input type="number" step="0.1" id="time_err" name="time_err" value="{time_err}">
                 </div>
             </div>
-
-            <input type="submit" value="Save Configuration">
-        </form>
+        <input type="submit" value="Save Configuration">
+    </form> 
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {{
+            const configForm = document.getElementById('configForm');
+            if (configForm) {{
+                configForm.addEventListener('submit', function(event) {{
+                    // Prevent the default form submission immediately
+                    event.preventDefault();
+                    const confirmation = confirm("Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif.");
+                    if (confirmation) {{
+                        console.log("Configuration save confirmed. Submitting form...");
+                        this.submit();
+                    }} else {{
+                        console.log("Configuration save cancelled.");
+                    }}
+                }});
+            }}
+        }});
+    </script>
 </body>
 </html>""".format(**config)
     return html
 
+def save_config(new_config):
+    with open('config_var.py', 'w') as f:
+        for key, value in new_config.items():
+            if isinstance(value, str):
+                f.write(f'{key} = "{value.replace('"', '\\"')}"\n')
+            elif isinstance(value, bool):
+                f.write(f'{key} = {value}\n')
+            elif isinstance(value, (int, float)):
+                f.write(f'{key} = {value}\n')
+            else:
+                f.write(f'{key} = {repr(value)}\n')
+            f.flush()
+
+def url_decode(s):
+    """ Try to do url decode as micropython doesnt have urlib parse..."""
+    result = []
+    i = 0
+    while i < len(s):
+        if s[i] == '%':
+            if i + 2 < len(s):
+                hex_val = s[i+1:i+3]
+                try:
+                    result.append(chr(int(hex_val, 16)))
+                    i += 3
+                except ValueError:
+                    result.append(s[i])
+                    i += 1
+            else:
+                result.append(s[i])
+                i += 1
+        elif s[i] == '+':
+            result.append(' ')
+            i += 1
+        else:
+            result.append(s[i])
+            i += 1
+    return ''.join(result)
+
 def save_configuration(request):
-    # Parse form data
-    form_data = request.split('\r\n')[-1]
-    form_data = dict(pair.split('=') for pair in form_data.split('&'))
+    """ Save the configuration file """
+    decoded_request = request.decode('utf-8')
+    body_start = decoded_request.find('\r\n\r\n')
+    if body_start == -1:
+        return "Error: Request body not found."
 
-    # Update config
-    for key, value in form_data.items():
+    form_data_str = decoded_request[body_start + 4:] # +4 to skip '\r\n\r\n'
+    parsed_items = {}
+    pairs = form_data_str.split('&')
+    for pair in pairs:
+        if '=' in pair:
+            key, value = pair.split('=', 1) # Split only on the first '='
+            parsed_items[url_decode(key)] = url_decode(value)
+        else:
+            parsed_items[url_decode(pair)] = ""
+
+    for key, value in parsed_items.items():
         if key in config:
-            print("DEBUG", config[key], value)
-            config[key] = value
+            current_config_value = config.get(key)
+            
+            if isinstance(current_config_value, int):
+                try:
+                    config[key] = int(value)
+                except ValueError:
+                    print(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value or string.")
+            elif isinstance(current_config_value, float):
+                try:
+                    config[key] = float(value)
+                except ValueError:
+                    print(f"Warning: Could not convert '{value}' to float for '{key}'. Keeping previous value or string.")
+            elif isinstance(current_config_value, bool):
+                # Convert 'True'/'False' strings to boolean (case-insensitive)
+                config[key] = value.lower() == 'true'
+            else:
+                config[key] = value
 
-    # Save to file
     save_config(config)
-
-    # Redirect or respond
-    return "Configuration saved successfully!"
+    redirect_url = "/"
+    response_headers = [
+        "HTTP/1.1 303 See Other",
+        f"Location: {redirect_url}",
+        "Connection: close",
+        "",
+    ]
+    return "\r\n".join(response_headers)
