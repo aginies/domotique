@@ -76,6 +76,22 @@ def create_html_response():
             font-size: 16px;
             color: #555;
         }}
+        .config-button {{
+            display: block;
+            margin: 10px auto;
+            padding: 8px 16px;
+            font-size: 12px;
+            color: white;
+            background-color: #373837;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }}
+        .config-button:hover {{
+            background-color: #218838;
+        }}
     </style>
 </head>
 <body>
@@ -100,12 +116,9 @@ def create_html_response():
             document.getElementById('timestamp').textContent = 'Dernier clic: ' + timestamp;
         });
     </script>
-   <!--     <a href="/BP1_ACTIF"><button class="button">BP1</button></a>
-    <a href="/BP2_ACTIF">
-        <button class="button" disabled>BP2</button></a>
-        -->
     </div>
     <div class="footer">
+        <!--<button id="CONFIG" class="config-button">Configurer</button>-->
         <p>antoine@ginies.org</p>
     </div>
 </body>
