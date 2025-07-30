@@ -35,7 +35,7 @@ Control a Pool curtain
 # Installation
 
 * copy the full directory into **/** directory of the ESP32
-* copy **common/*** into **/** directory of the ESP32
+* copy needed libs from **common/** into **/** directory of the ESP32
 
 # Debug LED color
 
