@@ -1,3 +1,5 @@
+import web_config as w_c
+
 def save_config(new_config):
     with open('config_var.py', 'w') as f:
         for key, value in new_config.items():
@@ -54,26 +56,26 @@ def save_configuration(request):
             parsed_items[url_decode(pair)] = ""
 
     for key, value in parsed_items.items():
-        if key in config:
-            current_config_value = config.get(key)
+        if key in w_c.config:
+            current_config_value = w_c.config.get(key)
             
             if isinstance(current_config_value, int):
                 try:
-                    config[key] = int(value)
+                    w_c.config[key] = int(value)
                 except ValueError:
                     print(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value or string.")
             elif isinstance(current_config_value, float):
                 try:
-                    config[key] = float(value)
+                    w_c.config[key] = float(value)
                 except ValueError:
                     print(f"Warning: Could not convert '{value}' to float for '{key}'. Keeping previous value or string.")
             elif isinstance(current_config_value, bool):
                 # Convert 'True'/'False' strings to boolean (case-insensitive)
-                config[key] = value.lower() == 'true'
+                w_c.config[key] = value.lower() == 'true'
             else:
-                config[key] = value
+                w_c.config[key] = value
 
-    save_config(config)
+    save_config(w_c.config)
     redirect_url = "/"
     response_headers = [
         "HTTP/1.1 303 See Other",
