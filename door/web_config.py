@@ -27,7 +27,7 @@ def serve_config_page():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuration Piscine</title>
+    <title>Configuration {DOOR}</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -39,7 +39,7 @@ def serve_config_page():
         h1, h2 {{
             color: #2c3e50;
         }}
-        .form-container {{
+        .container {{
             background-color: #ffffff;
             padding: 30px;
             border-radius: 12px;
@@ -47,7 +47,7 @@ def serve_config_page():
             max-width: 600px;
             margin: 20px auto;
         }}
-        .form-group {{
+        .group {{
             margin-bottom: 20px;
         }}
         label {{
@@ -91,36 +91,36 @@ def serve_config_page():
     </style>
 </head>
 <body>
-    <div class="form-container">
+    <div class="container">
         <h1>Configuration pour la {DOOR}</h1>
-        <form id="configForm" action="/save_config" method="post">
-            <div class="form-group">
+        <form id="configF" action="/save_config" method="post">
+            <div class="group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
             </div>
             <div class="section">
                 <h2>WIFI</h2>
-                <div class="form-group">
+                <div class="group">
                     <label for="E_WIFI">Utiliser un réseau existant (True ou False):</label>
                     <input type="text" id="E_WIFI" name="E_WIFI" value="{E_WIFI}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="WIFI_SSID">WiFi SSID:</label>
                     <input type="text" id="WIFI_SSID" name="WIFI_SSID" value="{WIFI_SSID}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="WIFI_PASSWORD">WiFi Password:</label>
                     <input type="password" id="WIFI_PASSWORD" name="WIFI_PASSWORD" value="{WIFI_PASSWORD}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="AP_SSID">AP SSID:</label>
                     <input type="text" id="AP_SSID" name="AP_SSID" value="{AP_SSID}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="AP_PASSWORD">AP Password:</label>
                     <input type="password" id="AP_PASSWORD" name="AP_PASSWORD" value="{AP_PASSWORD}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="AP_CHANNEL">AP Channel:</label>
                     <input type="number" id="AP_CHANNEL" name="AP_CHANNEL" value="{AP_CHANNEL}">
                 </div>
@@ -128,31 +128,31 @@ def serve_config_page():
 
             <div class="section">
                 <h2>Advanced</h2>
-                <div class="form-group">
+                <div class="group">
                     <label for="I_LED_PIN">Internal LED Pin:</label>
                     <input type="number" id="I_LED_PIN" name="I_LED_PIN" value="{I_LED_PIN}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="LED_PIN">External LED Pin:</label>
                     <input type="number" id="LED_PIN" name="LED_PIN" value="{LED_PIN}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="DOOR_SENSOR_PIN">Door Sensor Pin:</label>
                     <input type="number" id="DOOR_SENSOR_PIN" name="DOOR_SENSOR_PIN" value="{DOOR_SENSOR_PIN}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="RELAY1_PIN">Relay 1 Pin:</label>
                     <input type="number" id="RELAY1_PIN" name="RELAY1_PIN" value="{RELAY1_PIN}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="RELAY2_PIN">Relay 2 Pin:</label>
                     <input type="number" id="RELAY2_PIN" name="RELAY2_PIN" value="{RELAY2_PIN}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="time_ok">LED OK Time (seconds):</label>
                     <input type="number" step="0.1" id="time_ok" name="time_ok" value="{time_ok}">
                 </div>
-                <div class="form-group">
+                <div class="group">
                     <label for="time_err">LED Error Time (seconds):</label>
                     <input type="number" step="0.1" id="time_err" name="time_err" value="{time_err}">
                 </div>
@@ -162,12 +162,15 @@ def serve_config_page():
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {{
-            const configForm = document.getElementById('configForm');
-            if (configForm) {{
-                configForm.addEventListener('submit', function(event) {{
+            const configF = document.getElementById('configF');
+            if (configF) {{
+                console.log("in configF");
+                configF.addEventListener('submit', function(event) {{
                     // Prevent the default form submission immediately
                     event.preventDefault();
+                    console.log("post preventDefault");
                     const confirmation = confirm("Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif.");
+                    // setTimeout(() => {{ console.log(" 2 seconds."); }}, 2000);                    
                     if (confirmation) {{
                         console.log("Configuration save confirmed. Submitting form...");
                         this.submit();
