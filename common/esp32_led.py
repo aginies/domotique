@@ -4,6 +4,7 @@ from machine import Pin
 from neopixel import NeoPixel
 import config_var as c_v
 
+# on ESP32-S3 you must sold the RGB pin on the board!
 I_led = Pin(c_v.I_LED_PIN, Pin.OUT)
 np = NeoPixel(I_led, 1)
 # One color per function to find the root cause
