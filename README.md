@@ -8,7 +8,6 @@ Control a Door
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
 * **Debug** easily using **color** (internal LED)
 
-![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/devel.jpg)
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/portail_web.jpg)
 
 # Goals of pool
@@ -55,12 +54,18 @@ After start, in case of error, the assigned color will blink.
 
 # Software
 
-* **thonny**: https://thonny.org/
+* One of the best IDE project to deal with **ESP32/micropython** is **thonny**: https://thonny.org/
 * **micropython**: https://micropython.org/
 * **esptool**: https://pypi.org/project/esptool/
 
 Optionnal:
 * **ampy**: https://pypi.org/project/adafruit-ampy/
+
+# Devel
+
+Any contribution is welcome. I am currently expermienting and testing lot of domotics stuff.
+
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/devel.jpg)
 
 # External website
 

@@ -405,7 +405,6 @@ def main():
         prev_door_state = door_state
         door_state = door_sensor.value()
         check_and_display_error()
-
         if prev_door_state == 0 and door_state == 1:
             led.value(0)
             e_l.internal_led_color(e_l.red)
