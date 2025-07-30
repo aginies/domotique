@@ -10,12 +10,12 @@ def create_html_response():
     disabled2 = "disabled" if bp2_exists else ""
     emergency_exists = d_u.file_exists("/EMERGENCY_STOP")
     disabled3 = "disabled" if emergency_exists else ""
-    button_style1 = "style='background-color: grey; cursor: not-allowed;'" if bp1_exists else ""
-    button_style2 = "style='background-color: grey; cursor: not-allowed;'" if bp2_exists else ""
-    button_style3 = "style='background-color: grey; cursor: not-allowed;'" if emergency_exists else ""
-    style_attribute1 = f'style="{button_style1}"' if button_style1 else ""
-    style_attribute2 = f'style="{button_style2}"' if button_style2 else ""
-    style_attribute3 = f'style="{button_style3}"' if button_style3 else ""
+    button_style1 = "style='background-color: grey;'" if bp1_exists else ""
+    button_style2 = "style='background-color: grey;'" if bp2_exists else ""
+    button_style3 = "style='background-color: grey;'" if emergency_exists else ""
+    style_attribute1 = {button_style1} if button_style1 else ""
+    style_attribute2 = {button_style2} if button_style2 else ""
+    style_attribute3 = {button_style3} if button_style3 else ""
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -117,7 +117,7 @@ def create_html_response():
         }}
         /* Progress Bar Styles */
         .progress-container {{
-            width: 375px;
+            width: 370px;
             background-color: #f3f3f3;
             border-radius: 5px;
             overflow: hidden;
@@ -250,7 +250,6 @@ def create_html_response():
                     bp2Button.style.backgroundColor = 'grey';
                     emergencyButton.disabled = true;
                     emergencyButton.style.backgroundColor = 'grey';
-                    // Stop any ongoing animation
                     if (currentProgressBarInterval) {{
                         clearInterval(currentProgressBarInterval);
                         currentProgressBarInterval = null;
@@ -261,24 +260,37 @@ def create_html_response():
                     emergencyButton.style.backgroundColor = '#DC3545';
 
                     // Re-enable/disable BP1/BP2 based on their individual active states
-                    if (data.BP1_active) {{
+                    if (!data.In_progress) {{
+                        console.log("Nothing ongoing")
+                        if (data.BP1_active) {{
+                            console.log("Volet ouvert")
+                            progressBar.style.width = '0%';
+                            progressBar.textContent = '0%';
+                        }} else if (data.BP2_active) {{
+                            console.log("Volet Fermé")
+                            progressBar.style.width = '100%';
+                            progressBar.textContent = '100%';
+                        }} else {{
+                            console.log("Strange...")
+                        }}
+                    }} else if (data.BP1_active) {{
+                        console.log("BP1_active")
                         bp1Button.disabled = true;
                         bp1Button.style.backgroundColor = 'grey';
-                        bp2Button.disabled = false; // BP2 can be active if BP1 is active
+                        bp2Button.disabled = false;
                         bp2Button.style.backgroundColor = '#007BFF';
                     }} else if (data.BP2_active) {{
+                        console.log("BP2_active")
                         bp2Button.disabled = true;
                         bp2Button.style.backgroundColor = 'grey';
-                        bp1Button.disabled = false; // BP1 can be active if BP2 is active
-                        bp1Button.style.backgroundColor = '#007BFF';
-                    }} else {{
-                        // If neither BP1 nor BP2 is active, enable both.
-                        // You might want a default state here, e.g., only BP1 enabled.
-                        // Assuming you want BP1 to start the sequence if nothing is active.
                         bp1Button.disabled = false;
                         bp1Button.style.backgroundColor = '#007BFF';
-                        bp2Button.disabled = true; // Typically, only one is active at a time, or BP1 initiates
-                        bp2Button.style.backgroundColor = 'grey';
+                    }} else {{
+                        console.log("Check I am lost in space")
+                        bp1Button.disabled = false;
+                        bp1Button.style.backgroundColor = '#007BFF';
+                        bp2Button.disabled = false;
+                        bp2Button.style.backgroundColor = '#007BFF';
                     }}
                 }}
             }})

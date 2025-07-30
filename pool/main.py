@@ -43,7 +43,7 @@ relay2.off()
 
 # At start we can only Open the Pool
 # remove all previous ERROR
-TO_REMOVE = ["/BP1", "/EMERGENCY_STOP"]
+TO_REMOVE = ["/BP1", "/EMERGENCY_STOP", "/IN_PROGRESS"]
 for doit in TO_REMOVE:
     try:
         os.remove(doit)
@@ -51,7 +51,6 @@ for doit in TO_REMOVE:
         pass
 with open('/BP2', 'w') as file:
     file.write('BP2 INIT FILE')
-
 
 def check_and_display_error():
     """ In case of error display quickly the error color """
@@ -95,6 +94,7 @@ def oled_constant_show():
 def ctrl_relay(which_one):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
+
     if which_one == 1:
         relay = relay1
         duration = c_v.time_to_open
@@ -106,6 +106,8 @@ def ctrl_relay(which_one):
         active_file = '/BP2'
         inactive_file = '/BP1'
 
+    with open('/IN_PROGRESS', 'w') as file:
+                file.write('This file was created by clicking BP1 or BP2.')
     try:
         # internal_led_blink(pink, led_off, 3, c_v.time_ok) # Keep if non-blocking
         relay.on()
@@ -142,6 +144,10 @@ def ctrl_relay(which_one):
                 os.remove("/BP2")
             except OSError:
                 pass
+        try:
+            os.remove("/IN_PROGRESS")
+        except OSError:
+            pass
         lock.release()
         gc.collect()
 
@@ -250,10 +256,12 @@ def handle_request(cl, request):
         bp1_active = d_u.file_exists('/BP1')
         bp2_active = d_u.file_exists('/BP2')
         emergency_stop = d_u.file_exists('/EMERGENCY_STOP')
+        in_progress = d_u.file_exists('/IN_PROGRESS')
         status_data = {
             "BP1_active": bp1_active,
             "BP2_active": bp2_active,
-            "Emergency_stop": emergency_stop
+            "Emergency_stop": emergency_stop,
+            "In_progress": in_progress
             }
         response_content = ujson.dumps(status_data)
         content_type = "application/json"
@@ -329,7 +337,7 @@ def main():
 
     if c_v.E_WIFI is False:
         ap, ERR_WIFI = start_WIFI_ap()
-        IP_ADDR = AP_IP[0]
+        IP_ADDR = c_v.AP_IP[0]
     else:
         result_con_wifi = d_w.connect_to_wifi()
         if result_con_wifi['success']:
@@ -341,7 +349,7 @@ def main():
             ap, ERR_WIFI = start_WIFI_ap()
             if ap:
                 o_s.oled_show_text_line("AP Wifi Ok", 0)
-                IP_ADDR = AP_IP[0]
+                IP_ADDR = c_v.AP_IP[0]
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
     # Read the initial state of the door sensor
@@ -411,7 +419,7 @@ def main():
         oled_constant_show()
         
         if sock:
-            handle_client_connection(sock) #, AP_IP[0])
+            handle_client_connection(sock)
         
         utime.sleep(0.1)
         
