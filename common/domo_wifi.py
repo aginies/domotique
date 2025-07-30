@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 """ WIFI network """
 
 import network

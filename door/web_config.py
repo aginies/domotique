@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 import config_var
 
 # Load existing configuration

@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 import micropython
 import gc
 

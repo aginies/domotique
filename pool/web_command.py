@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 """ Main HTML Web interface """
 import domo_utils as d_u
 import config_var as c_v

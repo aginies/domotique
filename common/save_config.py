@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 import web_config as w_c
 
 def save_config(new_config):

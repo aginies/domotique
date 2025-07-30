@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 """ Oled SSD1306 """
 import utime
 import ssd1306 # the small oled screen

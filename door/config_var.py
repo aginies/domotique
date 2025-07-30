@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 # Main name of the stuff to control
 # As this will be used for WIFI name dont use space!
 # No more than 13 characters or you won't see it on the ssd1306

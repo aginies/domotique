@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 """ ESP32 internal Led """
 import utime
 from machine import Pin

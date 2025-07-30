@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 """ Web command page """
 import config_var as c_v
 
