@@ -117,12 +117,12 @@ def create_html_response():
         }}
         /* Progress Bar Styles */
         .progress-container {{
-            width: 90%;
-            max-width: 500px;
+            width: 375px;
             background-color: #f3f3f3;
             border-radius: 5px;
             overflow: hidden;
             height: 30px;
+            margin-left: 20px;
             margin-top: 20px;
             border: 1px solid #ddd;
             margin-left: auto;
@@ -132,7 +132,7 @@ def create_html_response():
         .progress-bar {{
             width: 0%;
             height: 100%;
-            background-color: #4CAF50;
+            background-color: #007BFF;
             text-align: center;
             line-height: 30px;
             color: white;
@@ -145,7 +145,7 @@ def create_html_response():
             padding: 8px 16px;
             font-size: 12px;
             color: white;
-            background-color: #28a745; /* Green color for configuration */
+            background-color: #373837;
             border: none;
             border-radius: 5px;
             text-decoration: none;
