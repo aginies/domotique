@@ -6,6 +6,7 @@ import utime
 from machine import Pin, SoftI2C
 import esp32 # get MCU temp
 
+# Internal libs
 import web_command as w_cmd
 import esp32_led as e_l
 import oled_ssd1306 as o_s

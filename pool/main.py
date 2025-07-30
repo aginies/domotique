@@ -107,7 +107,7 @@ def ctrl_relay(which_one):
         inactive_file = '/BP1'
 
     with open('/IN_PROGRESS', 'w') as file:
-                file.write('This file was created by clicking BP1 or BP2.')
+        file.write('This file was created by clicking BP1 or BP2.')
     try:
         # internal_led_blink(pink, led_off, 3, c_v.time_ok) # Keep if non-blocking
         relay.on()
