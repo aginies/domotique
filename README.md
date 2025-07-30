@@ -22,6 +22,8 @@ Control a Pool curtain
 * **Debug** easily using **color** (internal LED)
 * **Configure** the timing and other parameters through a web interface
 
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
+
 # Hardware
 
 * Develop on an ESP32-S3-WROOM. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED.
