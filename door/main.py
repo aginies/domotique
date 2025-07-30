@@ -11,6 +11,11 @@ import esp32_led as e_l
 import oled_ssd1306 as o_s
 import config_var as c_v
 import domo_wifi as d_w
+import web_config as w_c
+import save_config as s_c
+
+# LIST OF CONNECTED CLIENTS
+connected_ips = set()
 
 # LED EXTERNAL
 led = Pin(c_v.LED_PIN, Pin.OUT)
@@ -85,30 +90,37 @@ def ctrl_relay(which_one):
         ERR_CTRL_RELAY = True
         return None
 
-def handle_client_connection(sock, new_ip):
+def handle_client_connection(sock):
     """ At client connection send html stuff """
     try:
         cl, addr = sock.accept()
-        print('Client connecte depuis', addr)
+        client_ip = addr[0]
+        if client_ip not in connected_ips:
+            print('Client connecté depuis', addr)
+            connected_ips.add(client_ip)
         request = cl.recv(1024)
         #print(request)
-        handle_request(request)
-        html = w_cmd.create_html_response()
-        response = (
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            f"{html}")
-        cl.sendall(response.encode())
-        cl.close()
-    except OSError:
+        handle_request(cl, request)
+    except OSError as err:
+        if err.args[0] == errno.EAGAIN:
+            pass
+        else:
+            print("Error handling client connection:", err)
+        try:
+            if 'cl' in locals() and cl:
+                cl.close()
+        except NameError:
+            pass # cl might not be defined if accept() failed
         pass
 
-def handle_request(request):
+def handle_request(cl, request):
     """ Gérer les requêtes HTTP entrantes """
     global last_ctrl_relay_time
     current_time = utime.time()
+    response_content = ""
+    status_code = "200 OK"
+    content_type = "text/html"
+
     if b'/BP1_ACTIF' in request:
         if current_time - last_ctrl_relay_time > 3:
             print("BP1 activé")
@@ -124,6 +136,34 @@ def handle_request(request):
         else:
             print("BP2 Duplicate request seen...")
         ctrl_relay(2)
+    elif b'/CONFIG' in request:
+        response_content = w_c.serve_config_page()
+        content_type = "text/html"
+    elif request.startswith('GET /save_config'):
+        response_content = w_c.serve_config_page()
+    elif request.startswith('POST /save_config'):
+        print(request)
+        response_from_save_config = s_c.save_configuration(request)
+        if response_from_save_config.startswith("HTTP/1.1 30"):
+            cl.sendall(response_from_save_config.encode('utf-8'))
+            cl.close()
+            return
+        else:
+            # If save_configuration returns regular content (e.g., an error message)
+            response_content = response_from_save_config
+    else:
+        response_content = w_cmd.create_html_response()
+        content_type = "text/html"
+
+    response = (
+        f"HTTP/1.1 {status_code}\r\n"
+        f"Content-Type: {content_type}\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        f"{response_content}"
+    )
+    cl.sendall(response.encode())
+    cl.close()
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
@@ -196,29 +236,32 @@ def main():
     print(statusd)        
     o_s.oled_show_text_line(statusd, 10)
 
-    #if ap:
-    if IP_ADDR and IP_ADDR != '0.0.0.0':
-        addr = socket.getaddrinfo(IP_ADDR, 80)[0][-1]
-        sock = socket.socket()
-        try:
-            sock.bind(addr)
-            o_s.oled_show_text_line("Socket Ok", 20)
-            sock.listen(1)
-            # Ne bloque pas le while :)
-            sock.setblocking(False)
-            o_s.oled_show_text_line("Listening Ok", 30)
-            print('Listening on', addr)
-            e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
-        except OSError as err:
-            print(err)
-            o_s.oled_show_text_line("Socket :80 NOK!", 20)
-            e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
-            ERR_SOCKET = True
-    else:
-        print('Problème Avec le WIFI')
-        o_s.oled_show_text_line("WIFI AP NOK!", 30)
-        ERR_WIFI = True
-        e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, time_err)
+    ports_to_try = [80, 81]
+    for port in ports_to_try:
+        if IP_ADDR and IP_ADDR != '0.0.0.0':
+            addr = socket.getaddrinfo(IP_ADDR, port)[0][-1]
+            sock = socket.socket()
+            try:
+                sock.bind(addr)
+                o_s.oled_show_text_line(f"Socket Ok on port {port}", 20)
+                sock.listen(5)
+                sock.setblocking(False)
+                o_s.oled_show_text_line("Listening Ok", 30)
+                print(f'Listening on {addr}')
+                e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
+                PORT = port
+                ERR_SOCKET = False
+                break  # Exit the loop if binding is successful
+            except OSError as err:
+                print(f"Failed to bind to port {port}: {err}")
+                o_s.oled_show_text_line(f"Socket :{port} NOK!", 20)
+                e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
+                ERR_SOCKET = True
+        else:
+            print('Problème Avec le WIFI')
+            o_s.oled_show_text_line("WIFI AP NOK!", 30)
+            ERR_WIFI = True
+            internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
     # We are ready
     error_vars = [ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI]
@@ -247,7 +290,7 @@ def main():
         oled_constant_show()
 
         if sock:
-            handle_client_connection(sock, c_v.AP_IP[0])
+            handle_client_connection(sock)
 
         utime.sleep(0.1)
         

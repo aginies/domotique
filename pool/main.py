@@ -17,6 +17,7 @@ import oled_ssd1306 as o_s
 import config_var as c_v
 import domo_wifi as d_w
 import web_config as w_c
+import save_config as s_c
 
 lock = _thread.allocate_lock()
 shared_counter = 0
@@ -262,24 +263,14 @@ def handle_request(cl, request):
     elif request.startswith('GET /save_config'):
         response_content = w_c.serve_config_page()
     elif request.startswith('POST /save_config'):
-        print(request)
-        response_from_save_config = w_c.save_configuration(request)
+        response_from_save_config = s_c.save_configuration(request)
         # Check if the returned value is a redirect response
         if response_from_save_config.startswith("HTTP/1.1 30"):
-            # If it's a redirect, send it directly and RETURN
             cl.sendall(response_from_save_config.encode('utf-8'))
             cl.close()
             return
         else:
-            # If save_configuration returns regular content (e.g., an error message)
             response_content = response_from_save_config
-            # status_code and content_type remain default (200 OK, text/html)
-            # unless save_configuration explicitly sets them for non-redirect paths
-#    else:
-#      # Handle other requests or 404 Not Found
-#        status_code = "404 Not Found"
-#        response_content = "<h1>404 Not Found</h1><p>The requested URL was not found on this server.</p>"
-#        content_type = "text/html"
     else:
         response_content = w_cmd.create_html_response()
         content_type = "text/html"
