@@ -24,6 +24,7 @@ def initialize_oled():
     except OSError as err:
         print(f"Ecran OLED NOK: {err}")
         ERR_OLED = True
+        pass
 
 def oled_show_text_line(text, line):
     """ Show a text on a specific line """

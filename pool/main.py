@@ -87,7 +87,7 @@ def oled_constant_show():
             oled_d.text(" ! ** !", 0, 20)
             oled_d.text("Mode degrade!", 0, 30)
         oled_d.text(temp_mcu, 0, 40)
-        oled_d.text(statusd, 0, 50)
+        #oled_d.text(statusd, 0, 50)
         oled_d.show()
 
 
@@ -311,7 +311,7 @@ def main():
     global PORT
     ap = None
     # ERR_* are used to display LED color in case of...
-    global ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
+    global ERR_SOCKET, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI, ERR_OLED
     ERR_SOCKET = False
     ERR_OLED = False
     ERR_WIFI = False
@@ -392,14 +392,25 @@ def main():
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
     
-    # We are ready
-    error_vars = [ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI]
-    #ERR_CON_WIFI = True
+    if oled_d is None:
+        ERR_OLED = True
+    ERR_WIFI = True
+    ERR_SOCKET = True
+    error_vars = {
+        'Ouverture Socket': ERR_SOCKET,
+        'Ecran OLED': ERR_OLED,
+        'Wifi': ERR_WIFI,
+        'Controle du relay': ERR_CTRL_RELAY,
+        'Connection Wifi': ERR_CON_WIFI
+    }
     if all(not error for error in error_vars):
-        print("Système OK, pas d'erreur")
+        print("Système OK")
         e_l.french_flag()
     else:
-        print("Au moins une erreur...")
+        error_messages = [f"Erreur: {var_name}" for var_name, var_value in error_vars.items() if var_value]
+        print(", ".join(error_messages))
+
+    # We are ready
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()

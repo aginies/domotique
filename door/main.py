@@ -263,13 +263,24 @@ def main():
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
-    # We are ready
-    error_vars = [ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI]
+    if oled_d is None:
+        ERR_OLED = True
+
+    error_vars = {
+        'Ouverture Socket': ERR_SOCKET,
+        'Ecran OLED': ERR_OLED,
+        'Wifi': ERR_WIFI,
+        'Controle du relay': ERR_CTRL_RELAY,
+        'Connection Wifi': ERR_CON_WIFI
+    }
     if all(not error for error in error_vars):
-        print("Système OK, pas d'erreur")
+        print("Système OK")
         e_l.french_flag()
     else:
-        print("Au moins une erreur...")
+        error_messages = [f"Erreur: {var_name}" for var_name, var_value in error_vars.items() if var_value]
+        print(", ".join(error_messages))
+
+    # We are ready
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
