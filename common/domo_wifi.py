@@ -35,7 +35,7 @@ def connect_to_wifi():
         if o_s.oled_d:
             o_s.oled_d.fill(0)
             o_s.oled_show_text_line(info, 10)
-            utime.sleep(2)
+        utime.sleep(2)
     if o_s.oled_d:
         o_s.oled_d.fill(1)
         o_s.oled_d.fill(0)
