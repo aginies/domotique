@@ -151,7 +151,7 @@ def main():
 
     oled_d = o_s.initialize_oled()
     # Start up info
-    info_start = "Door Control"
+    info_start = "Guibo Control"
     print(info_start)
     if oled_d:
         oled_d.text(info_start, 0, 0)
