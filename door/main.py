@@ -61,7 +61,8 @@ def oled_constant_show():
             oled_d.text("Wifi SSID:", 0, 0)
             oled_d.text(SSID, 0, 10)
             oled_d.text("Wifi IP AP:", 0, 20)
-            oled_d.text(IP_ADDR, 0, 30)
+            INFO_W = IP_ADDR +":"+ str(PORT)
+            oled_d.text(INFO_W, 0, 30)
         else:
             oled_d.text(" ! Attention !", 0, 0)
             oled_d.text(" Wifi Pas OK", 0, 10)
@@ -181,6 +182,7 @@ def main():
     sock = None
     global oled_d
     global IP_ADDR
+    global PORT
     ap = None
     # ERR_* are used to display LED color in case of...
     global ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
