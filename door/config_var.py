@@ -15,12 +15,12 @@ I_LED_PIN = 48
 # E_WIFI is False you will create a Wifi Access Point
 E_WIFI = True # False
 # WIFI CLIENT credentials
-WIFI_SSID = "SSSID"
+WIFI_SSID = "WIFISSID"
 WIFI_PASSWORD = "WIFIPASSWORD"
 
 # WIFI AP
 AP_SSID = "W_Portail"
-AP_PASSWORD = 'JESAISPAS!'
+AP_PASSWORD = '12345678'
 AP_HIDDEN_SSID = False # True
 AP_CHANNEL = 6
 AP_IP = ('192.168.66.1', '255.255.255.0', '192.168.66.1', '192.168.66.1')
@@ -39,3 +39,19 @@ RELAY2_PIN = 16
 # Time in second for LED
 time_ok = 0.05
 time_err = 0.015
+
+# OLED PIN
+OLED_SCL_PIN = 15
+OLED_SDA_PIN = 21
+
+#RC 552 RFID
+AUTHORIZED_CARDS = [
+    [0x08, 0x24, 0x07, 0x95],
+    [0xF5, 0x31, 0x8A, 0x04],
+    ]
+
+SCK_PIN = 18
+MOSI_PIN = 11
+MISO_PIN = 12
+RST_PIN = 4
+CS_PIN = 5

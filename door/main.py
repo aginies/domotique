@@ -4,7 +4,10 @@ import socket
 import network
 import utime
 from machine import Pin, SoftI2C
+import _thread
+import gc
 import esp32 # get MCU temp
+from mfrc522 import MFRC522
 
 # Internal libs
 import web_command as w_cmd
@@ -14,6 +17,9 @@ import config_var as c_v
 import domo_wifi as d_w
 import web_config as w_c
 import save_config as s_c
+
+lock = _thread.allocate_lock()
+shared_counter = 0
 
 # LIST OF CONNECTED CLIENTS
 connected_ips = set()
@@ -33,6 +39,64 @@ relay1 = Pin(c_v.RELAY1_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 relay1.off()
 relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 relay2.off()
+
+def rfid_do_read():
+    """
+    Initializes the MFRC522 sensor, waits for a card, and reads its UID.
+    """
+    print("Initializing MFRC522...")
+    try:
+        rdr = MFRC522(
+            Pin(c_v.SCK_PIN),
+            Pin(c_v.MOSI_PIN),
+            Pin(c_v.MISO_PIN),
+            Pin(c_v.RST_PIN),
+            Pin(c_v.CS_PIN),
+            )        
+        print("MFRC522 initialized. Waiting for a card...")
+        while True:
+            (stat, tag_type) = rdr.request(rdr.REQIDL)
+            if stat == rdr.OK:
+                (stat, uid) = rdr.SelectTagSN()
+                if stat == rdr.OK:
+                    print("Card detected!")
+                    print("UID: " + rdr.tohexstring(uid))
+                    utime.sleep(2)
+            utime.sleep(0.5)
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def rfid_do_access_control():
+    """
+    Initializes the MFRC522 sensor, waits for a card, and checks its UID
+    against a list of authorized cards.
+    """
+    try:
+        rdr = MFRC522(
+            Pin(c_v.SCK_PIN),
+            Pin(c_v.MOSI_PIN),
+            Pin(c_v.MISO_PIN),
+            Pin(c_v.RST_PIN),
+            Pin(c_v.CS_PIN),
+            )
+        #print("MFRC522 initialized. Waiting for a card...")
+        while True:
+            (stat, tag_type) = rdr.request(rdr.REQIDL)
+            if stat == rdr.OK:
+                (stat, uid) = rdr.SelectTagSN()
+                if stat == rdr.OK:
+                    #print("\nCard detected!")
+                    print("UID: " + rdr.tohexstring(uid))
+                    if uid in c_v.AUTHORIZED_CARDS:
+                        print(">>> ACCESS AUTORISE <<<")
+                    else:
+                        print(">>> ACCESS REJETE <<<")
+                    utime.sleep(3)
+            utime.sleep(0.5)
+
+    except Exception as err:
+        print(f"An error occurred: {err}")
 
 def check_and_display_error():
     """ In case of error display quickly the error color """
@@ -284,6 +348,7 @@ def main():
         print(", ".join(error_messages))
 
     # We are ready
+    _thread.start_new_thread(rfid_do_access_control, ())
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
@@ -306,7 +371,7 @@ def main():
         if sock:
             handle_client_connection(sock)
 
-        utime.sleep(0.1)
+        utime.sleep(0.5)
         
 if __name__ == "__main__":
     main()

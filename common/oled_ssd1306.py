@@ -7,7 +7,7 @@ import ssd1306 # the small oled screen
 from machine import Pin, SoftI2C
 
 # ESP32 Pin assignment OLED
-i2c = SoftI2C(scl=Pin(36), sda=Pin(21))
+i2c = SoftI2C(scl=Pin(c_v.OLED_SCL_PIN), sda=Pin(c_v.OLED_SDA_PIN))
 oled_width = 128
 oled_height = 64
 
