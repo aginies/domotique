@@ -6,6 +6,7 @@ import os
 import gc
 import micropython
 import machine
+import ntptime
 
 def file_exists(file_path):
     """Check if a file exists"""
@@ -14,6 +15,40 @@ def file_exists(file_path):
         return True
     except OSError:
         return False
+
+def set_time_with_ntp():
+    try:
+        print("Synchronizing time with NTP...")
+        ntptime.settime()
+        print("Time set successfully.")
+    except OSError as err:
+        print("Error setting time with NTP:", err)
+
+def set_rtc():
+    """ Set up the RTC object"""
+    rtc = machine.RTC()
+    return rtc
+
+def show_rtc_time():
+    rtc = machine.RTC()
+    dt_tuple = rtc.datetime()
+    hour = dt_tuple[4]
+    minute = dt_tuple[5]
+    second = dt_tuple[6]
+    time_str = f"{hour:02}:{minute:02}:{second:02}"
+    return time_str
+
+def show_rtc_date():
+    rtc = machine.RTC()
+    dt_tuple = rtc.datetime()
+    year = dt_tuple[0]
+    month = dt_tuple[1]
+    day = dt_tuple[2]
+    weekday = dt_tuple[3]
+    date_str = f"{year:04}-{month:02}-{day:02}"
+    #weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    #weekday_str = weekdays[weekday]
+    return date_str
 
 def get_memory_info():
     """
