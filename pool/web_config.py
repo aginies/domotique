@@ -24,7 +24,9 @@ config = {
     "RELAY1_PIN": config_var.RELAY1_PIN,
     "RELAY2_PIN": config_var.RELAY2_PIN,
     "time_ok": config_var.time_ok,
-    "time_err": config_var.time_err
+    "time_err": config_var.time_err,
+    "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
+    "OLED_SDA_PIN": config_var.OLED_SDA_PIN
 }
 
 def serve_config_page():
@@ -186,6 +188,14 @@ def serve_config_page():
                 <div class="form-group">
                     <label for="time_err">LED Error Time (seconds):</label>
                     <input type="number" step="0.1" id="time_err" name="time_err" value="{time_err}">
+                </div>
+                <div class="form-group">
+                    <label for="OLED_SCL_PIN">OLED SCL Pin:</label>
+                    <input type="number" step="1" id="OLED_SCL_PIN" name="OLED_SCL_PIN" value="{OLED_SCL_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="OLED_SDA_PIN">OLED SDA Pin:</label>
+                    <input type="number" step="1" id="OLED_SDA_PIN" name="OLED_SDA_PIN" value="{OLED_SDA_PIN}">
                 </div>
             </div>
         <input type="submit" value="Save Configuration">
