@@ -37,8 +37,11 @@ def show_freq():
     return freq_mhz
 
 def set_freq(freq):
-    """ Set the freq of the MCU """
-    machine.freq(freq)
+    """
+    Set the freq in MHz
+    frequency must be 20MHz, 40MHz, 80Mhz, 160MHz or 240MHz
+    """
+    machine.freq(freq*1000000)
 
 def print_info():
     """ Print the info """
