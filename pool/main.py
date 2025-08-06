@@ -95,6 +95,7 @@ def oled_constant_show():
             else:
                 oled_d.text("En Fonctionement", 0, 50)
         if d_u.file_exists('/EMERGENCY_STOP'):
+            oled_d.text("", 0, 50)
             oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
 
@@ -349,9 +350,12 @@ def main():
         result_con_wifi = d_w.connect_to_wifi()
         if result_con_wifi['success']:
             IP_ADDR = result_con_wifi['ip_address']
+            d_u.set_time_with_ntp()
+            print(d_u.show_rtc_date())
+            print(d_u.show_rtc_time())
         else:
             # Failed to connect to External Wifi
-            # STarting the Wifi AP
+            # Starting the Wifi AP
             ERR_CON_WIFI = True
             ap, ERR_WIFI = start_WIFI_ap()
             if ap:
@@ -359,6 +363,7 @@ def main():
                 IP_ADDR = c_v.AP_IP[0]
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
+
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
     print(f"Information sur {c_v.DOOR}:")
@@ -374,6 +379,7 @@ def main():
 
     ports_to_try = [80, 81]  # List of ports to try in order
     for port in ports_to_try:
+        o_s.oled_show_text_line("", 20)
         if IP_ADDR and IP_ADDR != '0.0.0.0':
             addr = socket.getaddrinfo(IP_ADDR, port)[0][-1]
             sock = socket.socket()
@@ -396,7 +402,7 @@ def main():
                 ERR_SOCKET = True
         else:
             print('Problème Avec le WIFI')
-            o_s.oled_show_text_line("WIFI AP NOK!", 30)
+            o_s.oled_show_text_line("WIFI AP NOK!", 40)
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
     
