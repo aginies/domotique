@@ -252,7 +252,7 @@ def main():
             sock = socket.socket()
             try:
                 sock.bind(addr)
-                o_s.oled_show_text_line(f"Socket Ok on port {port}", 20)
+                o_s.oled_show_text_line(f"Socket Ok: {port}", 20)
                 sock.listen(5)
                 sock.setblocking(False)
                 o_s.oled_show_text_line("Listening Ok", 30)
