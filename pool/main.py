@@ -403,7 +403,7 @@ def main():
         'Controle du relay': ERR_CTRL_RELAY,
         'Connection Wifi': ERR_CON_WIFI
     }
-    if all(not error for error in error_vars):
+    if not any(error_vars.values()):
         print("Système OK")
         e_l.french_flag()
     else:
