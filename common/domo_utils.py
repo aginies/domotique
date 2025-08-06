@@ -38,7 +38,7 @@ def show_freq():
 
 def set_freq(freq):
     """ Set the freq of the MCU """
-    machine.freq()
+    machine.freq(freq)
 
 def print_info():
     """ Print the info """
