@@ -52,3 +52,23 @@ def internal_led_off():
     """ Led is off """
     np[0] = led_off
     np.write()
+
+def set_color(r, g, b):
+    """Sets the color of the NeoPixel """
+    np[0] = (r, g, b)
+    np.write()
+
+def blink_color(color, num_blinks, delay_ms):
+    """Blinks the NeoPixel with a given color """
+    for _ in range(num_blinks):
+        set_color(color[0], color[1], color[2])
+        utime.sleep_ms(delay_ms)
+        set_color(0, 0, 0)
+        utime.sleep_ms(delay_ms)
+ 
+def interpolate_color(start_color, end_color, fraction):
+    """Interpolates between two colors based on a fraction """
+    r = int(start_color[0] + (end_color[0] - start_color[0]) * fraction)
+    g = int(start_color[1] + (end_color[1] - start_color[1]) * fraction)
+    b = int(start_color[2] + (end_color[2] - start_color[2]) * fraction)
+    return (r, g, b)
