@@ -94,6 +94,8 @@ def oled_constant_show():
                 oled_d.text("En Fermeture", 0, 50)
             else:
                 oled_d.text("En Fonctionement", 0, 50)
+        if d_u.file_exists('/EMERGENCY_STOP'):
+            oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
 
 def ctrl_relay(which_one):
