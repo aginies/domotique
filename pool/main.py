@@ -94,6 +94,7 @@ def oled_constant_show():
 def ctrl_relay(which_one):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
+    oled_d.text("", 0, 50)
 
     if which_one == 1:
         relay = relay1
@@ -317,7 +318,7 @@ def main():
     ERR_WIFI = False
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
-    
+    d_u.set_freq(160)
     oled_d = o_s.initialize_oled()
     # Start up info
     info_start = "Guibo Control"
@@ -372,7 +373,7 @@ def main():
             sock = socket.socket()
             try:
                 sock.bind(addr)
-                o_s.oled_show_text_line(f"Socket Ok on port {port}", 20)
+                o_s.oled_show_text_line(f"Socket Ok: {port}", 20)
                 sock.listen(5)
                 sock.setblocking(False)
                 o_s.oled_show_text_line("Listening Ok", 30)
@@ -394,8 +395,6 @@ def main():
     
     if oled_d is None:
         ERR_OLED = True
-    ERR_WIFI = True
-    ERR_SOCKET = True
     error_vars = {
         'Ouverture Socket': ERR_SOCKET,
         'Ecran OLED': ERR_OLED,
