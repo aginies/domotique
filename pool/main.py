@@ -87,14 +87,18 @@ def oled_constant_show():
             oled_d.text(" ! ** !", 0, 20)
             oled_d.text("Mode degrade!", 0, 30)
         oled_d.text(temp_mcu, 0, 40)
-        #oled_d.text(statusd, 0, 50)
+        if d_u.file_exists('/IN_PROGRESS'):
+            if d_u.file_exists('/BP1'):
+                oled_d.text("En Ouverture", 0, 50)
+            elif d_u.file_exists('/BP2'):
+                oled_d.text("En Fermeture", 0, 50)
+            else:
+                oled_d.text("En Fonctionement", 0, 50)
         oled_d.show()
-
 
 def ctrl_relay(which_one):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
-    oled_d.text("", 0, 50)
 
     if which_one == 1:
         relay = relay1
@@ -384,6 +388,7 @@ def main():
                 break  # Exit the loop if binding is successful
             except OSError as err:
                 print(f"Failed to bind to port {port}: {err}")
+                o_s.oled_show_text_line("", 20)
                 o_s.oled_show_text_line(f"Socket :{port} NOK!", 20)
                 e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
                 ERR_SOCKET = True
