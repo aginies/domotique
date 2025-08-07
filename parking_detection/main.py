@@ -24,21 +24,21 @@ def show_distance_color(distance_cm):
 
     if distance_cm >= 191:
         e_l.internal_led_off()
-    elif 190 >= distance_cm >= 150:
+    elif 190 >= distance_cm >= 151:
         e_l.blink_color(e_l.green, 1, 50)
-    elif 151 >= distance_cm >= 40:
+    elif 150 >= distance_cm >= 41:
         fraction = (150 - distance_cm) / (150 - 41)
         color = e_l.interpolate_color(e_l.green, e_l.red, fraction)
         e_l.set_color(color[0], color[1], color[2])
-    elif 41 >= distance_cm >= 30:
+    elif 40 >= distance_cm >= 31:
         e_l.blink_color(e_l.blue, 1, 50)
-    elif 31 >= distance_cm >= 20:
+    elif 30 >= distance_cm >= 21:
         e_l.blink_color(e_l.violet, 1, 50)
-    elif 21 >= distance_cm >= 10:
+    elif 20 >= distance_cm >= 11:
         e_l.blink_color(e_l.red, 1, 50)
-    elif 11 >= distance_cm >= 6:
+    elif 10 >= distance_cm >= 6:
         e_l.blink_color(e_l.white, 3, 10)
-    elif distance_cm <= 6:
+    elif distance_cm <= 5:
         e_l.internal_led_off()
 
 if __name__ == '__main__':
