@@ -24,6 +24,29 @@ def set_time_with_ntp():
     except OSError as err:
         print("Error setting time with NTP:", err)
 
+def is_dst_paris(dt_tuple):
+    """ Get the Paris Time """
+    year, month, day, weekday, hour, minute, second, _ = dt_tuple
+    def last_sunday(year, month):
+        if month == 12:
+            next_month_first_day = (year + 1, 1, 1)
+        else:
+            next_month_first_day = (year, month + 1, 1)
+        _, _, _, first_day_weekday, *_ = machine.RTC().datetime((next_month_first_day[0], next_month_first_day[1], next_month_first_day[2], 0, 0, 0, 0, None))
+        last_sunday = next_month_first_day[2] - (first_day_weekday + 1) % 7 - 7
+        return last_sunday
+
+    if month > 3 and month < 10:
+        return True
+    elif month == 3:
+        last_sunday_march = last_sunday(year, 3)
+        return day >= last_sunday_march and (day > last_sunday_march or hour >= 1)
+    elif month == 10:
+        last_sunday_october = last_sunday(year, 10)
+        return day < last_sunday_october or (day == last_sunday_october and hour < 1)
+    else:
+        return False
+
 def set_rtc():
     """ Set up the RTC object"""
     rtc = machine.RTC()
@@ -32,11 +55,15 @@ def set_rtc():
 def show_rtc_time():
     rtc = machine.RTC()
     dt_tuple = rtc.datetime()
-    hour = dt_tuple[4]
+    is_dst = is_dst_paris(dt_tuple)
+    # Adjust for Europe/Paris timezone (UTC+1 or UTC+2)
+    timezone_offset = 2 if is_dst else 1
+    hour = dt_tuple[4] + timezone_offset
     minute = dt_tuple[5]
     second = dt_tuple[6]
     time_str = f"{hour:02}:{minute:02}:{second:02}"
-    return time_str
+    print(time_str)
+    return hour, minute, second
 
 def show_rtc_date():
     rtc = machine.RTC()
