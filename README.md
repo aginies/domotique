@@ -26,6 +26,19 @@ Control a Pool shutter
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
 
+# Goals of parking_detection
+
+* get a flash light which indicate the distance between the wall and the car
+  * green to red between 150cm - 41cm
+  * blink blue between  40cm - 31cm
+  * blink purple between 30cm - 21cm
+  * blink red between 20cm - 11cm
+  * blink white between 10 - 6 cm
+  * Off under 6cm
+
+Hardware:
+* hcsr-04 ultra sonic sensor
+
 # Hardware
 
 * Develop on an ESP32-S3-WROOM. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED.
