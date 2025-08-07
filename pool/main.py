@@ -321,7 +321,7 @@ def main():
     global IP_ADDR
     global PORT
     ap = None
-    hour = 0
+    hour = 12
     # ERR_* are used to display LED color in case of...
     global ERR_SOCKET, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI, ERR_OLED
     ERR_SOCKET = False
