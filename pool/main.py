@@ -209,6 +209,7 @@ def handle_request(cl, request):
 
     if b'/BP1_ACTIF' in request:
         if current_time - last_ctrl_relay_time > 3:
+            oled_d.poweron()
             print("BP1 activé")
             last_ctrl_relay_time = current_time
             with open('/BP1', 'w') as file:
@@ -226,6 +227,7 @@ def handle_request(cl, request):
 
     elif b'/BP2_ACTIF' in request:
         if current_time - last_ctrl_relay_time > 3:
+            oled_d.poweron()
             print("BP2 activé")
             last_ctrl_relay_time = current_time
             with open('/BP2', 'w') as file:
@@ -242,6 +244,7 @@ def handle_request(cl, request):
         content_type = "text/plain" # Send plain text for AJAX responses
 
     elif b'/EMERGENCY_STOP' in request:
+        oled_d.poweron()
         print("Emergency Stop activé!")
         with open('/EMERGENCY_STOP', 'w') as file:
             file.write('Emergency stop is active and requires reboot.')
@@ -318,6 +321,7 @@ def main():
     global IP_ADDR
     global PORT
     ap = None
+    hour = 0
     # ERR_* are used to display LED color in case of...
     global ERR_SOCKET, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI, ERR_OLED
     ERR_SOCKET = False
@@ -352,7 +356,7 @@ def main():
             IP_ADDR = result_con_wifi['ip_address']
             d_u.set_time_with_ntp()
             print(d_u.show_rtc_date())
-            print(d_u.show_rtc_time())
+            hour, minute, second = d_u.show_rtc_time()
         else:
             # Failed to connect to External Wifi
             # Starting the Wifi AP
@@ -363,7 +367,6 @@ def main():
                 IP_ADDR = c_v.AP_IP[0]
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
-
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
     print(f"Information sur {c_v.DOOR}:")
@@ -439,7 +442,11 @@ def main():
             statusd = "Status: OUVERT"
             print(statusd)
 
-        oled_constant_show()
+        hour %= 24
+        if 6 <= hour < 23:
+            oled_constant_show()
+        else:
+            oled_d.poweroff()
         
         if sock:
             handle_client_connection(sock)
