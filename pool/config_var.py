@@ -15,7 +15,7 @@ nom_bp2 = "Fermeture"
 I_LED_PIN = 48
 
 # Timing top open or close the curtain in seconds
-time_to_close = 13
+time_to_close = 6
 time_to_open = 10
 
 # CHOOSE AP OR EXISTING WIFI
@@ -23,8 +23,8 @@ time_to_open = 10
 # E_WIFI is False you will create a Wifi Access Point
 E_WIFI = True # False
 # WIFI CLIENT credentials
-WIFI_SSID = "SSSID"
-WIFI_PASSWORD = "WIFIPASSWORD"
+WIFI_SSID = "WIFISSID"
+WIFI_PASSWORD = "PASSWORDWIFI"
 
 # WIFI AP
 AP_SSID = "W_Piscine"
@@ -38,16 +38,19 @@ AP_IP = ('192.168.66.1', '255.255.255.0', '192.168.66.1', '192.168.66.1')
 LED_PIN = 18
 
 # OLED PIN
-OLED_SCL_PIN = 15
-OLED_SDA_PIN = 21
+OLED_SCL_PIN = 7
+OLED_SDA_PIN = 18
 
 # DOOR MAGNET
 DOOR_SENSOR_PIN = 10
 
 # RELAY for BP1 and BP2
-RELAY1_PIN = 15
-RELAY2_PIN = 16
+RELAY1_PIN = 14
+RELAY2_PIN = 17
 
 # Time in second for LED
 time_ok = 0.1
 time_err = 0.3
+
+# PIN CODE TO CLOSE
+PIN_CODE = 4750

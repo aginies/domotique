@@ -19,6 +19,7 @@ def create_html_response():
     style_attribute1 = {button_style1} if button_style1 else ""
     style_attribute2 = {button_style2} if button_style2 else ""
     style_attribute3 = {button_style3} if button_style3 else ""
+    PIN_CODE = c_v.PIN_CODE
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -190,7 +191,8 @@ def create_html_response():
         const emergencyButton = document.getElementById('emergencyStop');
         const bp1Button = document.getElementById('BP1');
         const bp2Button = document.getElementById('BP2');
-        let emergencyActiveClient = false; 
+        let emergencyActiveClient = false;
+        const PIN_CODE = "4750";
         // Show progress bar at 100% as the curtain is closed
         progressBar.style.width = '100%';
         progressBar.textContent = '100%';
@@ -305,6 +307,13 @@ def create_html_response():
             const button = document.getElementById(buttonId);
 
             if (button && !button.disabled) {{
+                if (buttonId === 'BP2') {{
+                    const pin = prompt("Pour fermer entrer le code PIN:");
+                    if (pin !== {PIN_CODE)} {{
+                        alert("Code PIN incorrect. Le volet ne se fermera pas.");
+                        return;
+                    }}
+                }}
                 button.classList.add('clicked');
                 setTimeout(() => {{
                     button.classList.remove('clicked');
