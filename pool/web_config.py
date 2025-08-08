@@ -27,7 +27,7 @@ config = {
     "time_err": config_var.time_err,
     "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
     "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
-    "CODE_PIN": config_var.CODE_PIN
+    "PIN_CODE": config_var.PIN_CODE
 }
 
 def serve_config_page():
@@ -131,8 +131,8 @@ def serve_config_page():
                     <input type="text" id="nom_bp2" name="nom_bp2" value="{nom_bp2}">
                 </div>
                 <div class="form-group">
-                    <label for="CODE_PIN">Code Pin fermeture volet:</label>
-                    <input type="password" id="CODE_PIN" name="CODE_PIN" value="{CODE_PIN}">
+                    <label for="PIN_CODE">Code Pin fermeture volet:</label>
+                    <input type="password" id="PIN_CODE" name="PIN_CODE" value="{PIN_CODE}">
                 </div>
             </div>
 
