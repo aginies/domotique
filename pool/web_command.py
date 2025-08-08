@@ -306,13 +306,6 @@ def create_html_response():
             const button = document.getElementById(buttonId);
 
             if (button && !button.disabled) {{
-                if (buttonId === 'BP2') {{
-                    const pin = prompt("Pour fermer entrer le code PIN:");
-                    if (pin !== {PIN_CODE} {{
-                        alert("Code PIN incorrect. Le volet ne se fermera pas.");
-                        return;
-                    }}
-                }}
                 button.classList.add('clicked');
                 setTimeout(() => {{
                     button.classList.remove('clicked');
@@ -323,7 +316,14 @@ def create_html_response():
             if (buttonId === 'BP1') {{
                 animateProgressBar(TIME_TO_OPEN_MS, 100, 0); // Animate from 100% down to 0%
             }} else if (buttonId === 'BP2') {{
-                animateProgressBar(TIME_TO_CLOSE_MS, 0, 100); // Animate from 0% up to 100%
+                   console.log("clic on BP2, ask pin CODE")
+                   const pin = prompt("Pour fermer entrer le code PIN:");
+                   if (pin !== "{PIN_CODE}") {{
+                        alert("Code PIN incorrect. Le volet ne se fermera pas.");
+                        return;
+                   }} else {{
+                        animateProgressBar(TIME_TO_CLOSE_MS, 0, 100); // Animate from 0% up to 100%
+                   }}
             }}
             
             // Immediately disable buttons to prevent double clicks and reflect current action
