@@ -1,43 +1,47 @@
-# Goals of door
+# door
 
 Control a Door
 
-* Get info on the status of a door, **open** or **closed** using external **LED** (optionnal)
+* Get info on the status of a door, **open** or **closed** using an external **LED** (optionnal)
 * Control using a Wifi Access Point the door with a button on a **web server**
-* Connect to An **existing Wifi**, or Create a **dedicated WIFI Access Point**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
-* **Debug** easily using **color** (internal LED)
-* All Variables you need to adapt like **PIN** are in **config_var.py**
-* **Configure** a web interface (/CONFIG)
+* Use RFID to open the door (optionnal)
+* **Configure** using a web interface (/CONFIG)
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/portail_web.jpg)
 
-# Goals of pool
+# pool
 
 Control a Pool shutter
 
 * Get info on the status of a shutter, **open** or **closed** using external **LED** (optionnal)
 * Control using a Wifi Access Point the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
-* Connect to An **existing Wifi**, or Create a **dedicated WIFI Access Point**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
-* **Debug** easily using **color** (internal LED)
-* All Variables you need to adapt like **PIN** are in **config_var.py**
 * **Configure** the timing and other parameters through a web interface
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
 
-# Goals of parking_detection
+# parking_detection
 
-* get a flash light which indicate the distance between the wall and the car
-  * green to red between 150cm - 41cm
-  * blink blue between  40cm - 31cm
-  * blink purple between 30cm - 21cm
-  * blink red between 20cm - 11cm
-  * blink white between 10 - 6 cm
-  * Off under 6cm
+Get a flash light which indicate the distance between the wall and the car
+* green to red between 150cm - 41cm
+* blink blue between  40cm - 31cm
+* blink purple between 30cm - 21cm
+* blink red between 20cm - 11cm
+* blink white between 10 - 6 cm
+* Off under 6cm
 
 Hardware:
 * hcsr-04 ultra sonic sensor
+
+# common
+
+All libs/modules needed to get stuff working.
+
+Common Features:
+* Connect to an **existing Wifi**, or Create a **dedicated WIFI Access Point**
+* **Debug** easily using **color** (internal LED)
+* All Variables you need to adapt like **PIN** are in **config_var.py**
 
 # Hardware
 
@@ -47,11 +51,12 @@ Hardware:
 * 5V or 3.3V relay
 * 0.96" Oled I2C screen or any other I2C. Adapt to your hardware
 * MC-38 magnetic captor, or any other similar stuff
+* hcsr-04 ultra sonic sensor (parking_detection)
 
 # Installation
 
 * copy the full directory into **/** directory of the ESP32
-* copy needed libs from **common/** into **/** directory of the ESP32
+* copy needed libs from **common** directory to **/** directory of the ESP32
 
 # Debug LED color
 
@@ -64,7 +69,7 @@ Color information
 * white: Connect to an existing Wifi
 * green: Init the OLED screen
 * pink: Control the 5V Relay
-* violet: Open a Socket (port 80)
+* purple: Open a Socket (port 80)
 
 After start, in case of error, the assigned color will blink.
 
