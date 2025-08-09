@@ -45,7 +45,7 @@ Common Features:
 
 # Hardware
 
-* Develop on an ESP32-S3-WROOM. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED.
+* Develop on an ESP32-S3-WROOM N16R8. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED. Be sure to build **micropython** for N16R8 to use all **storage** and **SPIRAM** available.
 * LED (5V) to get status of the door
 * Resistance to protect the LED (~270ohms)
 * 5V or 3.3V relay
@@ -92,3 +92,4 @@ Any contribution is welcome. I am currently expermienting and testing lot of dom
 
 * https://newbiely.com/
 * https://micropython.org/
+* https://github.com/PIBSAS/MicroPython_ESP32-S3-WROOM-1-N16R8_with_SmartConfig
