@@ -17,6 +17,7 @@ Control a Pool shutter
 * Get info on the status of a shutter, **open** or **closed** using external **LED** (optionnal)
 * Control using a Wifi Access Point the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
+* Live log available udpated every second
 * **Configure** the timing and other parameters through a web interface
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
