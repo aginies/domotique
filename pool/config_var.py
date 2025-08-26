@@ -9,6 +9,9 @@ DOOR = "Piscine"
 # Name of the button
 nom_bp1 = "Ouverture"
 nom_bp2 = "Fermeture"
+time_adjust = 2
+nom_open_b = "Ajustement Ouverture "
+nom_close_b = "Ajustement Fermeture "
 
 # on ESP32-S3 you must sold the RGB pin on the board!
 # INTERNAL LED (PIN 48)
@@ -24,11 +27,11 @@ time_to_open = 10
 E_WIFI = True # False
 # WIFI CLIENT credentials
 WIFI_SSID = "WIFISSID"
-WIFI_PASSWORD = "PASSWORDWIFI"
+WIFI_PASSWORD = "WIFIPASSWORD"
 
 # WIFI AP
 AP_SSID = "W_Piscine"
-AP_PASSWORD = 'JESAISPAS!'
+AP_PASSWORD = '12345678'
 AP_HIDDEN_SSID = False # True
 AP_CHANNEL = 6
 AP_IP = ('192.168.66.1', '255.255.255.0', '192.168.66.1', '192.168.66.1')
@@ -53,4 +56,4 @@ time_ok = 0.1
 time_err = 0.3
 
 # PIN CODE TO CLOSE
-PIN_CODE = 4750
+PIN_CODE = 1234
