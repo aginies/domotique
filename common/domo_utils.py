@@ -8,6 +8,44 @@ import micropython
 import machine
 import ntptime
 
+def check_and_delete_if_too_big(filepath, max_size_mb):
+    """
+    Checks the size of a file and deletes it if it exceeds
+    the specified maximum size.
+    """
+    max_size_bytes = max_size_mb * 1024 * 1024
+    if not file_exists(filepath):
+        print(f"File not found: {filepath}")
+        return False
+    try:
+        file_stats = os.stat(filepath)
+        current_size_bytes = file_stats[6]
+    except OSError:
+        print(f"File not found: {filepath}")
+        return False
+    if current_size_bytes > max_size_bytes:
+        print(f"File size ({current_size_bytes} bytes) exceeds the limit of {max_size_bytes} bytes. Deleting file...")
+        try:
+            os.remove(filepath)
+            print(f"Successfully deleted: {filepath}")
+            return True
+        except OSError as e:
+            print(f"Error deleting file {filepath}: {e}")
+            return False
+    else:
+        print(f"File size is within the limit. No action needed.")
+        return False
+
+def store_log(text_data, filename="/log.txt"):
+    """ Stores a text string as a new line in a log file. """
+    with open(filename, "a") as file:
+        file.write(text_data + "\n")
+
+def print_and_store_log(text_data):
+    """ print log and store them """
+    print(text_data)
+    store_log(text_data)
+
 def file_exists(file_path):
     """Check if a file exists"""
     try:
