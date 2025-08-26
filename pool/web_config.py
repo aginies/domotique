@@ -8,8 +8,11 @@ config = {
     "DOOR": config_var.DOOR,
     "nom_bp1": config_var.nom_bp1,
     "nom_bp2": config_var.nom_bp2,
+    "nom_open_b":  config_var.nom_open_b,
+    "nom_close_b": config_var.nom_close_b,
     "time_to_close": config_var.time_to_close,
     "time_to_open": config_var.time_to_open,
+    "time_adjust": config_var.time_adjust,
     "E_WIFI": config_var.E_WIFI,
     "WIFI_SSID": config_var.WIFI_SSID,
     "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
@@ -118,6 +121,10 @@ def serve_config_page():
                     <label for="time_to_open">Temps d'ouverture (secondes):</label>
                     <input type="number" id="time_to_open" name="time_to_open" value="{time_to_open}">
                 </div>
+                <div class="form-group">
+                    <label for="time_adjust">Temps d'ajustement (secondes):</label>
+                    <input type="number" id="time_adjust" name="time_adjust" value="{time_adjust}">
+                </div>
             </div>
 
             <div class="section">
@@ -129,6 +136,14 @@ def serve_config_page():
                 <div class="form-group">
                     <label for="nom_bp2">Nom du Boutton 2:</label>
                     <input type="text" id="nom_bp2" name="nom_bp2" value="{nom_bp2}">
+                </div>
+                <div class="form-group">
+                    <label for="nom_open_b">Nom du Boutton Ouverture ajustement:</label>
+                    <input type="text" id="nom_open_b" name="nom_open_b" value="{nom_open_b}">
+                </div>
+                <div class="form-group">
+                    <label for="nom_close_b">Nom du Boutton Fermeture ajustement:</label>
+                    <input type="text" id="nom_close_b" name="nom_close_b" value="{nom_close_b}">
                 </div>
                 <div class="form-group">
                     <label for="PIN_CODE">Code Pin fermeture volet:</label>
