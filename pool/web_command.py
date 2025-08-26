@@ -7,18 +7,20 @@ import config_var as c_v
 
 def create_html_response():
     """ Créer la réponse HTML """
+    emergency_exists = d_u.file_exists("/EMERGENCY_STOP")
     bp1_exists = d_u.file_exists('/BP1')
     disabled1 = "disabled" if bp1_exists else ""
     bp2_exists = d_u.file_exists('/BP2')
     disabled2 = "disabled" if bp2_exists else ""
-    emergency_exists = d_u.file_exists("/EMERGENCY_STOP")
+    disabled_open_b = "disabled" if emergency_exists else ""
+    disabled_close_b = "disabled" if emergency_exists else ""
     disabled3 = "disabled" if emergency_exists else ""
-    button_style1 = "style='background-color: grey;'" if bp1_exists else ""
-    button_style2 = "style='background-color: grey;'" if bp2_exists else ""
-    button_style3 = "style='background-color: grey;'" if emergency_exists else ""
-    style_attribute1 = {button_style1} if button_style1 else ""
-    style_attribute2 = {button_style2} if button_style2 else ""
-    style_attribute3 = {button_style3} if button_style3 else ""
+    BUTTON_DISABLED = "style='background-color: grey;'"
+    button_style1 = BUTTON_DISABLED if bp1_exists else ""
+    button_style2 = BUTTON_DISABLED if bp2_exists else ""
+    button_style3 = BUTTON_DISABLED if emergency_exists else ""
+    button_style_open_b = BUTTON_DISABLED if emergency_exists else ""
+    button_style_close_b = BUTTON_DISABLED if emergency_exists else ""
     PIN_CODE = c_v.PIN_CODE
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -48,6 +50,29 @@ def create_html_response():
         h1 {{
             color: #444;
             margin-bottom: 30px;
+        }}
+        .small-button {{
+            padding: 24px 40px;
+            font-size: 12px;
+            background-color: #007BFF;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            text-decoration: none;
+            cursor: pointer;
+            margin: 10px;
+            transition: background-color 0.3s;
+        }}  
+        .small-button:hover {{
+            background-color: #138496; /* Darker blue on hover */
+        }}
+        .button-group {{
+            display: flex;
+            justify-content: center; /* Horizontally center the buttons */
+            align-items: center;     /* Vertically center the buttons */
+            gap: 10px;               /* Add space between the buttons */
+            flex-wrap: wrap;         /* Allow buttons to wrap to next line if needed */
+            margin-bottom: 20px;     /* Add some space below the button group */
         }}
         .button {{
             display: inline-block;
@@ -159,6 +184,12 @@ def create_html_response():
         .config-button:hover {{
             background-color: #218838;
         }}
+        .footer-buttons {{
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }}
     </style>
 </head>
 <body>
@@ -168,8 +199,14 @@ def create_html_response():
         <div id="progressBarContainer" class="progress-container">
             <div id="progressBar" class="progress-bar">0%</div>
         </div>
-        <button id="BP1" class="button" {disabled1} {button_style1}>{c_v.nom_bp1}</button>
-        <button id="BP2" class="button" {disabled2} {button_style2}>{c_v.nom_bp2}</button>
+        <div class="button-group">
+            <button id="BP1" class="button" {disabled1} {button_style1}>{c_v.nom_bp1}</button>
+            <button id="BP2" class="button" {disabled2} {button_style2}>{c_v.nom_bp2}</button>
+        </div>
+        <div class="button-group">
+            <button id="OPEN_B" class="small-button" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} {c_v.time_adjust}sec</button>
+            <button id="CLOSE_B" class="small-button" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} {c_v.time_adjust}sec</button>
+        </div>
         <button id="emergencyStop" class="emergency-button" {disabled3} {button_style3}>Arrêt d'Urgence</button>
         <!--<div id="timestamp"></div>-->
         <div id="rebootMessage" class="reboot-message">
@@ -177,7 +214,10 @@ def create_html_response():
         </div>
     </div>
     <div class="footer">
-        <button id="CONFIG" class="config-button">Configurer</button>
+        <div class="footer-buttons">
+            <button id="CONFIG" class="config-button">Configurer</button>
+            <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
+        </div>
         <p>antoine@ginies.org</p>
     </div>
     <script>
@@ -191,6 +231,8 @@ def create_html_response():
         const emergencyButton = document.getElementById('emergencyStop');
         const bp1Button = document.getElementById('BP1');
         const bp2Button = document.getElementById('BP2');
+        const open_bButton = document.getElementById('OPEN_B');
+        const close_bButton = document.getElementById('CLOSE_B');
         let emergencyActiveClient = false;
         // Show progress bar at 100% as the curtain is closed
         progressBar.style.width = '100%';
@@ -253,6 +295,10 @@ def create_html_response():
                     bp2Button.disabled = true;
                     bp2Button.style.backgroundColor = 'grey';
                     emergencyButton.disabled = true;
+                    open_bButton.disabled = true;
+                    open_bButton.backgroundColor = 'grey';
+                    close_bButton.disabled = true;
+                    close_bButton.backgroundColor = 'grey';
                     emergencyButton.style.backgroundColor = 'grey';
                     if (currentProgressBarInterval) {{
                         clearInterval(currentProgressBarInterval);
@@ -367,6 +413,11 @@ def create_html_response():
             bp1Button.style.backgroundColor = 'grey';
             bp2Button.disabled = true;
             bp2Button.style.backgroundColor = 'grey';
+            open_bButton.disabled = true;
+            open_bButton.backgroundColor = 'grey';
+            close_bButton.disabled = true;
+            close_bButton.backgroundColor = 'grey';
+            emergencyButton.style.backgroundColor = 'grey';
             emergencyButton.disabled = true;
             emergencyButton.style.backgroundColor = 'grey';
             if (currentProgressBarInterval) {{
@@ -399,6 +450,12 @@ def create_html_response():
         document.getElementById('BP1').addEventListener('click', function() {{
             handleButtonClick('BP1', '/BP1_ACTIF');
         }});
+        document.getElementById('OPEN_B').addEventListener('click', function() {{
+            handleButtonClick('OPEN_B', '/OPEN_B_ACTIF');
+        }});
+         document.getElementById('CLOSE_B').addEventListener('click', function() {{
+            handleButtonClick('CLOSE_B', '/CLOSE_B_ACTIF');
+        }});
         document.getElementById('BP2').addEventListener('click', function() {{
             handleButtonClick('BP2', '/BP2_ACTIF');
         }});
@@ -409,8 +466,88 @@ def create_html_response():
         }});
         document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
         updateStatus(); // Initial button status update
-        setInterval(updateStatus, 1500);
+        setInterval(updateStatus, 1000);
     }}); // End of DOMContentLoaded listener
+    </script>
+</body>
+</html>"""
+    return html
+
+def create_log_page():
+    """ Creates the HTML page for viewing the log with auto-refresh. """
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log {c_v.DOOR}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            padding: 20px;
+        }}
+        .log-container {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+            max-height: 80vh;
+            overflow-y: auto; /* Enable scrolling */
+            border: 1px solid #ddd;
+        }}
+        h1 {{
+            text-align: center;
+        }}
+        .back-button {{
+            display: inline-block;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }}
+        .back-button:hover {{
+            background-color: #0056b3;
+        }}
+    </style>
+</head>
+<body>
+    <a href="/" class="back-button">Retour</a>
+    <h1>Log du Système</h1>
+    <div id="logContent" class="log-container">
+        Chargement du log...
+    </div>
+    <script>
+        const logContentDiv = document.getElementById('logContent');
+
+        function fetchLog() {{
+            fetch('/log.txt')
+                .then(response => {{
+                    if (!response.ok) {{
+                        throw new Error('Log file not found or server error');
+                    }}
+                    return response.text();
+                }})
+                .then(data => {{
+                    logContentDiv.textContent = data;
+                    // Auto-scroll to the bottom on update
+                    logContentDiv.scrollTop = logContentDiv.scrollHeight;
+                }})
+                .catch(error => {{
+                    logContentDiv.textContent = 'Erreur: ' + error.message;
+                    console.error('Error fetching log:', error);
+                }});
+        }}
+
+        // Fetch log immediately on page load
+        fetchLog();
+
+        // Set up polling to refresh every 1 seconds
+        setInterval(fetchLog, 1000);
     </script>
 </body>
 </html>"""

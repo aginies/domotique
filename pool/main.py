@@ -99,18 +99,16 @@ def oled_constant_show():
             oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
 
-def ctrl_relay(which_one):
+def ctrl_relay(which_one, duration, adjust):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
 
     if which_one == 1:
         relay = relay1
-        duration = c_v.time_to_open
         active_file = '/BP1'
         inactive_file = '/BP2'
     else:
         relay = relay2
-        duration = c_v.time_to_close
         active_file = '/BP2'
         inactive_file = '/BP1'
 
@@ -119,11 +117,11 @@ def ctrl_relay(which_one):
     try:
         # internal_led_blink(pink, led_off, 3, c_v.time_ok) # Keep if non-blocking
         relay.on()
-        print(f"Relay {which_one} ON for {duration} seconds.")
+        d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
         start_time = utime.time()
         while utime.time() - start_time < duration:
             if check_stop_relay():
-                print(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
+                d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
                 relay.off()
                 break
             utime.sleep_ms(50)
@@ -132,16 +130,21 @@ def ctrl_relay(which_one):
             relay.off()
 
         if not check_stop_relay():
-            with open(active_file, 'w') as file:
-                file.write(f'This file was created by clicking BP{which_one}.')
-            try:
-                os.remove(inactive_file)
-            except OSError:
-                pass
-            try:
-                os.remove("/EMERGENCY_STOP")
-            except OSError:
-                pass
+            if not adjust:
+                d_u.print_and_store_log("Full action in progress")
+                d_u.print_and_store_log(f"Creating {active_file}")
+                with open(active_file, 'w') as file:
+                    file.write(f'This file was created by clicking BP{which_one}.')
+                try:
+                    os.remove(inactive_file)
+                except OSError:
+                    pass
+                try:
+                    os.remove("/EMERGENCY_STOP")
+                except OSError:
+                    pass
+            else:
+                d_u.print_and_store_log("Adjustement in progress")
         else:
             # If stopped by emergency, ensure files are cleared
             try:
@@ -160,7 +163,7 @@ def ctrl_relay(which_one):
         gc.collect()
 
     except Exception as err:
-        print(f"Error in ctrl_relay({which_one}):", err)
+        d_u.print_and_store_log(f"Error in ctrl_relay({which_one}): {err}")
         relay1.off()
         relay2.off()
         # internal_led_blink(pink, led_off, 5, c_v.time_err)
@@ -171,7 +174,7 @@ def check_stop_relay():
 
 def ctrl_relay_off():
     """ Force all relay Off! """
-    print("Relays forced OFF, stop_relay_action set to True.")
+    d_u.print_and_store_log("Relays forced OFF, stop_relay_action set to True.")
     relay1.off()
     relay2.off()
 
@@ -181,7 +184,7 @@ def handle_client_connection(sock):
         cl, addr = sock.accept()
         client_ip = addr[0]
         if client_ip not in connected_ips:
-            print('Client connecté depuis', addr)
+            d_u.print_and_store_log(f"Client connecté depuis {addr}")
             connected_ips.add(client_ip)
         request = cl.recv(1024)
         #print(request)
@@ -190,7 +193,7 @@ def handle_client_connection(sock):
         if err.args[0] == errno.EAGAIN:
             pass
         else:
-            print("Error handling client connection:", err)
+            d_u.print_and_store_log(f"Error handling client connection: {err}")
         try:
             if 'cl' in locals() and cl:
                 cl.close()
@@ -198,57 +201,66 @@ def handle_client_connection(sock):
             pass # cl might not be defined if accept() failed
         pass
 
-def handle_request(cl, request):
-    """ Handle incoming HTTP requests """
+def thread_do_job_crtl_relay(B_text, relay_nb, duration):
+    """ Do the thread job for the realy """
     global last_ctrl_relay_time
     current_time = utime.time()
+    response_content = ""
+    adjust = True
+    
+    if current_time - last_ctrl_relay_time > duration:
+        if oled_d is not None: oled_d.poweron()
+        d_u.print_and_store_log(f"{B_text} activé")
+        last_ctrl_relay_time = current_time
+        if B_text != "OPEN_B" and B_text != "CLOSE_B":
+            adjust = False
+            d_u.print_and_store_log(f"Will Create /{B_text} file")
+        else:
+            adjust = True
+            d_u.print_and_store_log(f"Will Not Create any files")
+        if B_text == "BP1":
+            try:
+                os.remove("/BP2")
+            except OSError:
+                pass # BP2 might not exist
+        elif B_text == "BP2":
+            try:
+                os.remove("/BP1")
+            except OSError:
+                pass # BP1 might not exist
+ 
+        _thread.start_new_thread(ctrl_relay, (relay_nb, duration, adjust))
+        response_content = B_text + " activated"
+    else:
+        d_u.print_and_store_log(f"{B_text} Duplicate request seen...")
+        response_content = "Duplicate request " + B_text
+    content_type = "text/plain"
+
+def handle_request(cl, request):
+    """ Handle incoming HTTP requests """
 
     response_content = ""
     status_code = "200 OK"
     content_type = "text/html"
 
     if b'/BP1_ACTIF' in request:
-        if current_time - last_ctrl_relay_time > 3:
-            oled_d.poweron()
-            print("BP1 activé")
-            last_ctrl_relay_time = current_time
-            with open('/BP1', 'w') as file:
-                file.write('This file was created by clicking BP1.')
-            try:
-                os.remove("/BP2")
-            except OSError:
-                pass # BP2 might not exist
-            _thread.start_new_thread(ctrl_relay, (1,))
-            response_content = "BP1 activated"
-        else:
-            print("BP1 Duplicate request seen...")
-            response_content = "Duplicate request BP1"
-        content_type = "text/plain" # Send plain text for AJAX responses
+        thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
+
+    elif b'/OPEN_B_ACTIF' in request:
+        thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
+
+    elif b'/CLOSE_B_ACTIF' in request:
+        thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
 
     elif b'/BP2_ACTIF' in request:
-        if current_time - last_ctrl_relay_time > 3:
-            oled_d.poweron()
-            print("BP2 activé")
-            last_ctrl_relay_time = current_time
-            with open('/BP2', 'w') as file:
-                file.write('This file was created by clicking BP2.')
-            try:
-                os.remove("/BP1")
-            except OSError:
-                pass # BP1 might not exist
-            _thread.start_new_thread(ctrl_relay, (2,))
-            response_content = "BP2 activated"
-        else:
-            print("BP2 Duplicate request seen...")
-            response_content = "Duplicate request BP2"
-        content_type = "text/plain" # Send plain text for AJAX responses
+        thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
 
     elif b'/EMERGENCY_STOP' in request:
-        oled_d.poweron()
-        print("Emergency Stop activé!")
+        if oled_d is not None: oled_d.poweron()
+        d_u.print_and_store_log("Emergency Stop activé!")
         with open('/EMERGENCY_STOP', 'w') as file:
             file.write('Emergency stop is active and requires reboot.')
-        print("Created /EMERGENCY_STOP file.")
+        d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
         ctrl_relay_off()
         # Remove both /BP1 and /BP2 files to reflect that no operation is active.
         # This ensures the /status endpoint returns False for both active flags.
@@ -257,11 +269,11 @@ def handle_request(cl, request):
             for TODO in LIST_F:
                 with open('/'+TODO, 'w') as file:
                     file.write('FORCE ALL BUTTON OFF!')    
-            print("Force all Buttons OFF")
+            d_u.print_and_store_log("Force all Buttons OFF")
         except OSError:
             pass
         response_content = "Emergency Stop activated"
-        content_type = "text/plain" # Send plain text for AJAX response
+        content_type = "text/plain"
         
     elif b'/status' in request:
         bp1_active = d_u.file_exists('/BP1')
@@ -290,6 +302,20 @@ def handle_request(cl, request):
             return
         else:
             response_content = response_from_save_config
+    elif b'/log.txt' in request:
+        try:
+            with open('/log.txt', 'r') as file:
+                response_content = file.read()
+            content_type = "text/plain"
+            status_code = "200 OK"
+        except FileNotFoundError:
+            response_content = "Log file not found."
+            content_type = "text/plain"
+            status_code = "404 Not Found"
+    elif b'/livelog' in request and request.startswith(b'GET'):
+        response_content = w_cmd.create_log_page()
+        content_type = "text/html"
+        status_code = "200 OK"
     else:
         response_content = w_cmd.create_html_response()
         content_type = "text/html"
@@ -332,8 +358,9 @@ def main():
     d_u.set_freq(160)
     oled_d = o_s.initialize_oled()
     # Start up info
-    info_start = "Guibo Control"
-    print(info_start)
+    info_start = "###--- Guibo Control ---### "
+    d_u.check_and_delete_if_too_big("/log.txt", 2)
+    d_u.print_and_store_log(info_start)
     if oled_d:
         oled_d.text(info_start, 0, 0)
         info_control = "Version 1.0"
@@ -343,7 +370,7 @@ def main():
         oled_d.text('ique', 0, 40)
         oled_d.text('ag@ginies.org', 0, 50)
         oled_d.show()
-        utime.sleep(2)
+        utime.sleep(1)
     if oled_d:
         oled_d.fill(0)
 
@@ -355,8 +382,9 @@ def main():
         if result_con_wifi['success']:
             IP_ADDR = result_con_wifi['ip_address']
             d_u.set_time_with_ntp()
-            print(d_u.show_rtc_date())
+            d_u.print_and_store_log(d_u.show_rtc_date())
             hour, minute, second = d_u.show_rtc_time()
+            d_u.print_and_store_log(f"{hour}:{minute}:{second}")
         else:
             # Failed to connect to External Wifi
             # Starting the Wifi AP
@@ -369,7 +397,7 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
-    print(f"Information sur {c_v.DOOR}:")
+    d_u.print_and_store_log(f"Information sur {c_v.DOOR}:")
     if door_state == 0:
         statusd = "Status: OUVERT"
         led.value(1)
@@ -377,7 +405,7 @@ def main():
         statusd = "Status: FERME"
         led.value(0)
 
-    print(statusd)        
+    d_u.print_and_store_log(statusd)        
     o_s.oled_show_text_line(statusd, 10)
 
     ports_to_try = [80, 81]  # List of ports to try in order
@@ -392,19 +420,19 @@ def main():
                 sock.listen(5)
                 sock.setblocking(False)
                 o_s.oled_show_text_line("Listening Ok", 30)
-                print(f'Listening on {addr}')
+                d_u.print_and_store_log(f'Listening on {addr}')
                 e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
                 PORT = port
                 ERR_SOCKET = False
                 break  # Exit the loop if binding is successful
             except OSError as err:
-                print(f"Failed to bind to port {port}: {err}")
+                d_u.print_and_store_log(f"Failed to bind to port {port}: {err}")
                 o_s.oled_show_text_line("", 20)
                 o_s.oled_show_text_line(f"Socket :{port} NOK!", 20)
                 e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
                 ERR_SOCKET = True
         else:
-            print('Problème Avec le WIFI')
+            d_u.print_and_store_log('Problème Avec le WIFI')
             o_s.oled_show_text_line("WIFI AP NOK!", 40)
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
@@ -419,11 +447,11 @@ def main():
         'Connection Wifi': ERR_CON_WIFI
     }
     if not any(error_vars.values()):
-        print("Système OK")
+        d_u.print_and_store_log("Système OK")
         e_l.french_flag()
     else:
         error_messages = [f"Erreur: {var_name}" for var_name, var_value in error_vars.items() if var_value]
-        print(", ".join(error_messages))
+        d_u.print_and_store_log(", ".join(error_messages))
 
     # We are ready
     while True:
@@ -434,19 +462,19 @@ def main():
             led.value(0)
             e_l.internal_led_color(e_l.red)
             statusd = "Status: FERME"
-            print(statusd)
+            d_u.print_and_store_log(statusd)
 
         elif prev_door_state == 1 and door_state == 0:
             led.value(1)
             e_l.internal_led_color(e_l.green)
             statusd = "Status: OUVERT"
-            print(statusd)
+            d_u.print_and_store_log(statusd)
 
         hour %= 24
         if 6 <= hour < 23:
             oled_constant_show()
         else:
-            oled_d.poweroff()
+            if oled_d is not None: oled_d.poweroff()
         
         if sock:
             handle_client_connection(sock)
