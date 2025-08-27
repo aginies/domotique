@@ -7,6 +7,7 @@ import ssd1306 # the small oled screen
 from machine import Pin, SoftI2C
 
 import config_var as c_v
+import domo_utils as d_u
 
 # ESP32 Pin assignment OLED
 i2c = SoftI2C(scl=Pin(c_v.OLED_SCL_PIN), sda=Pin(c_v.OLED_SDA_PIN))
@@ -20,11 +21,11 @@ def initialize_oled():
     global oled_d
     try:
         oled_d = ssd1306.SSD1306_I2C(oled_width, oled_height, i2c)
-        print("Ecran OLED Ok")
+        d_u.print_and_store_log("Ecran OLED Ok")
         oled_d.fill(0)
         return oled_d
     except OSError as err:
-        print(f"Ecran OLED NOK: {err}")
+        d_u.print_and_store_log(f"Ecran OLED NOK: {err}")
         ERR_OLED = True
         pass
 
