@@ -17,6 +17,9 @@ nom_close_b = "Ajustement Fermeture "
 # INTERNAL LED (PIN 48)
 I_LED_PIN = 48
 
+# ESP32-S3 CPU freq
+CPU_FREQ=160
+
 # Timing top open or close the curtain in seconds
 time_to_close = 6
 time_to_open = 10
@@ -38,7 +41,7 @@ AP_IP = ('192.168.66.1', '255.255.255.0', '192.168.66.1', '192.168.66.1')
 
 #### PIN CONFIG
 # LED EXTERNAL
-LED_PIN = 18
+LED_PIN = 12
 
 # OLED PIN
 OLED_SCL_PIN = 7
