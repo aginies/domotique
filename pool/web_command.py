@@ -63,20 +63,21 @@ def create_html_response():
             margin: 10px;
             transition: background-color 0.3s;
         }}  
-        .small-button:hover {{
+        .button-small:hover {{
             background-color: #138496; /* Darker blue on hover */
         }}
         .button-group {{
             display: flex;
-            justify-content: center; /* Horizontally center the buttons */
-            align-items: center;     /* Vertically center the buttons */
-            gap: 10px;               /* Add space between the buttons */
-            flex-wrap: wrap;         /* Allow buttons to wrap to next line if needed */
-            margin-bottom: 20px;     /* Add some space below the button group */
+            justify-content: center;
+            align-items: stretch;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
         }}
         .button {{
             display: inline-block;
             margin: 10px;
+            flex-grow: 1;
             padding: 24px 40px;
             font-size: 20px;
             color: white;
@@ -86,6 +87,18 @@ def create_html_response():
             text-decoration: none;
             cursor: pointer;
             transition: background-color 0.3s;
+        }}
+        .button-small {{
+            text-decoration: none;
+            margin: 4px;
+            padding: 14px 10px;
+            border: none;
+            cursor: pointer;
+            color: white;
+            border-radius: 5px;
+            font-size: 12px;
+            transition: background-color 0.3s;
+            background-color: #17A2B8; /* Example color to differentiate */
         }}
         .button:hover {{
             background-color: #0056b3;
@@ -169,8 +182,7 @@ def create_html_response():
             transition: width 0.05s linear;
         }}
         .config-button {{
-            display: block;
-            margin: 10px auto;
+            display: inline-block;
             padding: 8px 16px;
             font-size: 12px;
             color: white;
@@ -187,15 +199,15 @@ def create_html_response():
         .footer-buttons {{
             display: flex;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 15px;
+            margin-bottom: 0px;
         }}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Contrôle {c_v.DOOR}</h1>
-        <p>Toujours <b>contrôler</b> visuellement le <b>{c_v.DOOR}</b></p>
+        <p>Toujours <b>contrôler</b> visuellement la <b>{c_v.DOOR}</b></p>
         <div id="progressBarContainer" class="progress-container">
             <div id="progressBar" class="progress-bar">0%</div>
         </div>
@@ -204,8 +216,8 @@ def create_html_response():
             <button id="BP2" class="button" {disabled2} {button_style2}>{c_v.nom_bp2}</button>
         </div>
         <div class="button-group">
-            <button id="OPEN_B" class="small-button" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} {c_v.time_adjust}sec</button>
-            <button id="CLOSE_B" class="small-button" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} {c_v.time_adjust}sec</button>
+            <button id="OPEN_B" class="button-small" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} {c_v.time_adjust}sec</button>
+            <button id="CLOSE_B" class="button-small" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} {c_v.time_adjust}sec</button>
         </div>
         <button id="emergencyStop" class="emergency-button" {disabled3} {button_style3}>Arrêt d'Urgence</button>
         <!--<div id="timestamp"></div>-->
@@ -215,10 +227,10 @@ def create_html_response():
     </div>
     <div class="footer">
         <div class="footer-buttons">
-            <button id="CONFIG" class="config-button">Configurer</button>
+            <button id="SAVE_config" class="config-button">Configurer</button>
+            <a href="mailto:antoine@ginies.org" class="config-button">antoine@ginies.org</a>
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
         </div>
-        <p>antoine@ginies.org</p>
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', function() {{
@@ -459,10 +471,10 @@ def create_html_response():
         document.getElementById('BP2').addEventListener('click', function() {{
             handleButtonClick('BP2', '/BP2_ACTIF');
         }});
-        document.getElementById('CONFIG').addEventListener('click', function(event) {{
+        document.getElementById('SAVE_config').addEventListener('click', function(event) {{
             console.log("Config button clicked!");
-            handleButtonClick('CONFIG', '/CONFIG');
-            window.location.href = '/CONFIG';
+            handleButtonClick('SAVE_config', '/SAVE_config');
+            window.location.href = '/SAVE_config';
         }});
         document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
         updateStatus(); // Initial button status update
@@ -546,8 +558,8 @@ def create_log_page():
         // Fetch log immediately on page load
         fetchLog();
 
-        // Set up polling to refresh every 1 seconds
-        setInterval(fetchLog, 1000);
+        // Set up polling to refresh every 1.5 seconds
+        setInterval(fetchLog, 1500);
     </script>
 </body>
 </html>"""
