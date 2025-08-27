@@ -8,6 +8,7 @@ import _thread
 from machine import Pin
 import esp32 # get MCU temp
 import gc
+import ure as re
 
 # Internal lib
 import web_command as w_cmd
@@ -18,6 +19,7 @@ import config_var as c_v
 import domo_wifi as d_w
 import web_config as w_c
 import save_config as s_c
+import web_files_management as w_f_m
 
 lock = _thread.allocate_lock()
 shared_counter = 0
@@ -125,7 +127,7 @@ def ctrl_relay(which_one, duration, adjust):
                 relay.off()
                 break
             utime.sleep_ms(50)
-        
+
         if relay.value() == 1:
             relay.off()
 
@@ -186,7 +188,7 @@ def handle_client_connection(sock):
         if client_ip not in connected_ips:
             d_u.print_and_store_log(f"Client connecté depuis {addr}")
             connected_ips.add(client_ip)
-        request = cl.recv(1024)
+        request = cl.recv(4192)
         #print(request)
         handle_request(cl, request)
     except OSError as err:
@@ -207,7 +209,7 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
     current_time = utime.time()
     response_content = ""
     adjust = True
-    
+
     if current_time - last_ctrl_relay_time > duration:
         if oled_d is not None: oled_d.poweron()
         d_u.print_and_store_log(f"{B_text} activé")
@@ -228,7 +230,7 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
                 os.remove("/BP1")
             except OSError:
                 pass # BP1 might not exist
- 
+
         _thread.start_new_thread(ctrl_relay, (relay_nb, duration, adjust))
         response_content = B_text + " activated"
     else:
@@ -242,6 +244,7 @@ def handle_request(cl, request):
     response_content = ""
     status_code = "200 OK"
     content_type = "text/html"
+    full_request = request
 
     if b'/BP1_ACTIF' in request:
         thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
@@ -274,7 +277,7 @@ def handle_request(cl, request):
             pass
         response_content = "Emergency Stop activated"
         content_type = "text/plain"
-        
+
     elif b'/status' in request:
         bp1_active = d_u.file_exists('/BP1')
         bp2_active = d_u.file_exists('/BP2')
@@ -288,12 +291,9 @@ def handle_request(cl, request):
             }
         response_content = ujson.dumps(status_data)
         content_type = "application/json"
-    elif b'/CONFIG' in request:
+    elif request.startswith('GET /SAVE_config'):
         response_content = w_c.serve_config_page()
-        content_type = "text/html"
-    elif request.startswith('GET /save_config'):
-        response_content = w_c.serve_config_page()
-    elif request.startswith('POST /save_config'):
+    elif request.startswith('POST /SAVE_config'):
         response_from_save_config = s_c.save_configuration(request)
         # Check if the returned value is a redirect response
         if response_from_save_config.startswith("HTTP/1.1 30"):
@@ -316,6 +316,57 @@ def handle_request(cl, request):
         response_content = w_cmd.create_log_page()
         content_type = "text/html"
         status_code = "200 OK"
+    elif b'/file_management' in request:
+        response_content = w_f_m.serve_file_management_page()
+    elif request.startswith('GET /delete'):
+        request_str = request.decode('utf-8')
+        file_to_delete = request_str.split('file=', 1)[1].split(' ')[0]
+        try:
+            os.remove(file_to_delete)
+            d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
+            response_content = "File deleted. <a href='/file_management'>Return to File Manager</a>"
+        except OSError as e:
+            response_content = f"Error deleting file: {e}"
+    elif request.startswith('/upload'):
+        try:
+            d_u.print_and_store_log("Starting file upload process.")
+            headers_end = full_request.find(b'\r\n\r\n')
+            if headers_end == -1:
+                raise ValueError("Headers end not found.")
+            headers = full_request[:headers_end]
+            boundary_match = re.search(b'boundary=([^\r\n]+)', headers)
+            if not boundary_match:
+                raise ValueError("Boundary not found in headers.")
+            boundary = boundary_match.group(1)
+
+            filename_match = re.search(b'filename="([^"]+)"', headers)
+            if not filename_match:
+                raise ValueError("Filename not found in headers.")
+            filename = filename_match.group(1).decode('utf-8')
+
+            d_u.print_and_store_log(f"Found boundary: {boundary.decode()} and filename: {filename}")
+            body_start_index = headers_end + 4
+            first_chunk = full_request[body_start_index:]
+            with open("/" + filename, 'wb') as f:
+                f.write(first_chunk)
+                while True:
+                    chunk = cl.recv(1024)
+                    if not chunk:
+                        break # Connection closed or timeout
+                    if b'--' + boundary + b'--' in chunk:
+                        end_index = chunk.find(b'--' + boundary + b'--')
+                        f.write(chunk[:end_index - 2]) # -2 to remove trailing CRLF
+                        break
+                    else:
+                        f.write(chunk)
+
+            d_u.print_and_store_log(f"File {filename} uploaded successfully to the root directory.")
+            response_content = f"File {filename} uploaded. <a href='/file_management'>Return to File Manager</a>".encode('utf-8')
+
+        except Exception as e:
+            d_u.print_and_store_log(f"Error uploading file: {e}")
+            response_content = f"Error uploading file: {e}".encode('utf-8')
+            status_code = b"500 Internal Server Error"
     else:
         response_content = w_cmd.create_html_response()
         content_type = "text/html"
@@ -355,12 +406,12 @@ def main():
     ERR_WIFI = False
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
-    d_u.set_freq(160)
-    oled_d = o_s.initialize_oled()
     # Start up info
-    info_start = "###--- Guibo Control ---### "
+    info_start = "#############--- Guibo Control ---############# "
     d_u.check_and_delete_if_too_big("/log.txt", 2)
     d_u.print_and_store_log(info_start)
+    d_u.set_freq(c_v.CPU_FREQ)
+    oled_d = o_s.initialize_oled()
     if oled_d:
         oled_d.text(info_start, 0, 0)
         info_control = "Version 1.0"
@@ -405,7 +456,7 @@ def main():
         statusd = "Status: FERME"
         led.value(0)
 
-    d_u.print_and_store_log(statusd)        
+    d_u.print_and_store_log(statusd)
     o_s.oled_show_text_line(statusd, 10)
 
     ports_to_try = [80, 81]  # List of ports to try in order
@@ -436,7 +487,7 @@ def main():
             o_s.oled_show_text_line("WIFI AP NOK!", 40)
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
-    
+
     if oled_d is None:
         ERR_OLED = True
     error_vars = {
@@ -475,11 +526,11 @@ def main():
             oled_constant_show()
         else:
             if oled_d is not None: oled_d.poweroff()
-        
+
         if sock:
             handle_client_connection(sock)
-        
+
         utime.sleep(0.1)
-        
+
 if __name__ == "__main__":
     main()
