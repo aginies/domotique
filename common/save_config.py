@@ -2,6 +2,7 @@
 # GPL3
 
 import web_config as w_c
+import domo_utils as d_u
 
 def save_config(new_config):
     with open('config_var.py', 'w') as f:
@@ -59,6 +60,15 @@ def save_configuration(request):
             parsed_items[url_decode(pair)] = ""
 
     for key, value in parsed_items.items():
+        # Specific handling for CPU_FREQ from the dropdown
+        if key == 'CPU_FREQ':
+            try:
+                w_c.config[key] = int(value)
+            except ValueError:
+                d_u.print_and_store_log(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value.")
+            continue
+
+    for key, value in parsed_items.items():
         if key in w_c.config:
             current_config_value = w_c.config.get(key)
             
@@ -66,12 +76,12 @@ def save_configuration(request):
                 try:
                     w_c.config[key] = int(value)
                 except ValueError:
-                    print(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value or string.")
+                    d_u.print_and_store_log(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value or string.")
             elif isinstance(current_config_value, float):
                 try:
                     w_c.config[key] = float(value)
                 except ValueError:
-                    print(f"Warning: Could not convert '{value}' to float for '{key}'. Keeping previous value or string.")
+                    d_u.print_and_store_log(f"Warning: Could not convert '{value}' to float for '{key}'. Keeping previous value or string.")
             elif isinstance(current_config_value, bool):
                 # Convert 'True'/'False' strings to boolean (case-insensitive)
                 w_c.config[key] = value.lower() == 'true'
