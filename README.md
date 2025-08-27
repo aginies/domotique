@@ -6,7 +6,7 @@ Control a Door
 * Control using a Wifi Access Point the door with a button on a **web server**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
 * Use RFID to open the door (optionnal)
-* **Configure** using a web interface (/CONFIG)
+* **Configure** using a web interface
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/portail_web.jpg)
 
@@ -15,10 +15,11 @@ Control a Door
 Control a Pool shutter
 
 * Get info on the status of a shutter, **open** or **closed** using external **LED** (optionnal)
-* Control using a Wifi Access Point the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
+* Control using a **Wifi Access Point** the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
-* Live log available udpated every second
+* Live log available
 * **Configure** the timing and other parameters through a web interface
+* Under Devel: File management to udpate the system
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
 
