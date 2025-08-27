@@ -30,10 +30,23 @@ config = {
     "time_err": config_var.time_err,
     "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
     "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
-    "PIN_CODE": config_var.PIN_CODE
+    "PIN_CODE": config_var.PIN_CODE,
+    "CPU_FREQ": config_var.CPU_FREQ
 }
 
 def serve_config_page():
+    selected_options = {
+        'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
+        'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
+        'selected_80': 'selected' if config_var.CPU_FREQ == 80 else '',
+        'selected_160': 'selected' if config_var.CPU_FREQ == 160 else '',
+        'selected_240': 'selected' if config_var.CPU_FREQ == 240 else '',
+    }
+    wifi_config = {
+        'external_wifi_yes': 'True' if config_var.E_WIFI is True else '',
+        'external_wifi_no': 'False' if config_var.E_WIFI is False else '',
+    }
+
     html = """
 <!DOCTYPE html>
 <html lang="en">
@@ -80,6 +93,12 @@ def serve_config_page():
             font-size: 16px;
             background-color: #f9f9f9;
         }}
+        .button-group {{
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 20px;
+        }}
         input[type="submit"] {{
             background-color: #3498db;
             color: white;
@@ -90,9 +109,29 @@ def serve_config_page():
             font-size: 16px;
             font-weight: 600;
             transition: background-color 0.3s;
+            flex-grow: 1;
+            text-align: center;
+            text-decoration: none; /* For the anchor tag */
+            display: inline-block; /* For the anchor tag */
         }}
         input[type="submit"]:hover {{
             background-color: #2980b9;
+        }}
+        .cancel-button {{
+            background-color: #95a5a6;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none; /* Removes underline from the link */
+            display: inline-block;
+            transition: background-color 0.3s;
+        }}
+        .cancel-button:hover {{
+            background-color: #7f8c8d;      
         }}
         .section {{
             background-color: #f8f9fa;
@@ -101,12 +140,21 @@ def serve_config_page():
             margin-bottom: 20px;
             border-left: 4px solid #3498db;
         }}
+        select {{
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+            background-color: #f9f9f9;
+        }}
     </style>
 </head>
 <body>
     <div class="form-container">
         <h1>Configuration pour la {DOOR}</h1>
-        <form id="configForm" action="/save_config" method="post">
+        <form id="configForm" action="/SAVE_config" method="POST">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
@@ -155,7 +203,10 @@ def serve_config_page():
                 <h2>WIFI</h2>
                 <div class="form-group">
                     <label for="E_WIFI">Utiliser un réseau existant (True ou False):</label>
-                    <input type="text" id="E_WIFI" name="E_WIFI" value="{E_WIFI}">
+                    <select id="E_WIFI" name="E_WIFI">
+                        <option value="True" {external_wifi_yes}>True</option>
+                        <option value="False" {external_wifi_no}>False</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="WIFI_SSID">WiFi SSID:</label>
@@ -181,6 +232,16 @@ def serve_config_page():
 
             <div class="section">
                 <h2>Advanced</h2>
+                <div class="form-group">
+                    <label for="CPU_FREQ">CPU frequency of the ESP32:</label>
+                    <select id="CPU_FREQ" name="CPU_FREQ">
+                        <option value="20" {selected_20}>20 MHz</option>
+                        <option value="40" {selected_40}>40 MHz</option>
+                        <option value="80" {selected_80}>80 MHz</option>
+                        <option value="160" {selected_160}>160 MHz</option>
+                        <option value="240" {selected_240}>240 MHz</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label for="I_LED_PIN">Internal LED Pin:</label>
                     <input type="number" id="I_LED_PIN" name="I_LED_PIN" value="{I_LED_PIN}">
@@ -218,27 +279,40 @@ def serve_config_page():
                     <input type="number" step="1" id="OLED_SDA_PIN" name="OLED_SDA_PIN" value="{OLED_SDA_PIN}">
                 </div>
             </div>
+        <div class="button-group">
         <input type="submit" value="Save Configuration">
+        <a href="/" class="cancel-button">Cancel</a>
+        </div>
     </form> 
     </div>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {{
-            const configForm = document.getElementById('configForm');
-            if (configForm) {{
-                configForm.addEventListener('submit', function(event) {{
-                    // Prevent the default form submission immediately
-                    event.preventDefault();
-                    const confirmation = confirm("Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif.");
-                    if (confirmation) {{
-                        console.log("Configuration save confirmed. Submitting form...");
-                        this.submit();
-                    }} else {{
-                        console.log("Configuration save cancelled.");
-                    }}
-                }});
-            }}
-        }});
+  document.addEventListener("DOMContentLoaded", function () {{
+    const configForm = document.getElementById("configForm");
+
+    // Add an event listener for the form submission
+    configForm.addEventListener("submit", function (event) {{
+      // Check if a 'confirmation' has already been shown.
+      if (!this.dataset.isConfirmed) {{
+        // Prevent the form from submitting immediately
+        event.preventDefault();
+
+        // Show the confirmation dialog
+        const confirmation = confirm(
+          "Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif."
+        );
+
+        if (confirmation) {{
+          // If the user confirms, set a flag and resubmit the form
+          this.dataset.isConfirmed = "true";
+          this.submit();
+        }} else {{
+          // If the user cancels, do nothing, and the form remains
+          console.log("Configuration save cancelled.");
+        }}
+      }}
+    }});
+  }});
     </script>
 </body>
-</html>""".format(**config)
+</html>""".format(**config, **selected_options, **wifi_config)
     return html
