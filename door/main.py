@@ -144,12 +144,9 @@ def handle_request(cl, request):
         else:
             print("BP2 Duplicate request seen...")
         ctrl_relay(2)
-    elif b'/CONFIG' in request:
+    elif request.startswith('GET /SAVE_config'):
         response_content = w_c.serve_config_page()
-        content_type = "text/html"
-    elif request.startswith('GET /save_config'):
-        response_content = w_c.serve_config_page()
-    elif request.startswith('POST /save_config'):
+    elif request.startswith('POST /SAVE_config'):
         print(request)
         response_from_save_config = s_c.save_configuration(request)
         if response_from_save_config.startswith("HTTP/1.1 30"):
