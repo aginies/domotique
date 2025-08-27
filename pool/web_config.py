@@ -202,7 +202,7 @@ def serve_config_page():
             <div class="section">
                 <h2>WIFI</h2>
                 <div class="form-group">
-                    <label for="E_WIFI">Utiliser un réseau existant (True ou False):</label>
+                    <label for="E_WIFI">Utiliser un réseau existant:</label>
                     <select id="E_WIFI" name="E_WIFI">
                         <option value="True" {external_wifi_yes}>True</option>
                         <option value="False" {external_wifi_no}>False</option>
