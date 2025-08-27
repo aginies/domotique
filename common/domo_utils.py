@@ -15,25 +15,25 @@ def check_and_delete_if_too_big(filepath, max_size_mb):
     """
     max_size_bytes = max_size_mb * 1024 * 1024
     if not file_exists(filepath):
-        print(f"File not found: {filepath}")
+        print_and_store_log(f"File not found: {filepath}")
         return False
     try:
         file_stats = os.stat(filepath)
         current_size_bytes = file_stats[6]
     except OSError:
-        print(f"File not found: {filepath}")
+        print_and_store_log(f"File not found: {filepath}")
         return False
     if current_size_bytes > max_size_bytes:
-        print(f"File size ({current_size_bytes} bytes) exceeds the limit of {max_size_bytes} bytes. Deleting file...")
+        print_and_store_log(f"File size ({current_size_bytes} bytes) exceeds the limit of {max_size_bytes} bytes. Deleting file...")
         try:
             os.remove(filepath)
-            print(f"Successfully deleted: {filepath}")
+            print_and_store_log(f"Successfully deleted: {filepath}")
             return True
-        except OSError as e:
-            print(f"Error deleting file {filepath}: {e}")
+        except OSError as err:
+            print_and_store_log(f"Error deleting file {filepath}: {err}")
             return False
     else:
-        print(f"File size is within the limit. No action needed.")
+        print_and_store_log(f"File size is within the limit of {max_size_mb}Mb. No action needed.")
         return False
 
 def store_log(text_data, filename="/log.txt"):
@@ -43,8 +43,12 @@ def store_log(text_data, filename="/log.txt"):
 
 def print_and_store_log(text_data):
     """ print log and store them """
-    print(text_data)
-    store_log(text_data)
+    hour, minute, second = show_rtc_time()
+    current_date = show_rtc_date()
+    current_time = str(hour)+":"+str(minute)+":"+str(second)
+    data_to_print = current_date+" "+current_time+": "+text_data
+    print(data_to_print)
+    store_log(data_to_print)
 
 def file_exists(file_path):
     """Check if a file exists"""
@@ -56,11 +60,11 @@ def file_exists(file_path):
 
 def set_time_with_ntp():
     try:
-        print("Synchronizing time with NTP...")
+        print_and_store_log("Synchronizing time with NTP...")
         ntptime.settime()
-        print("Time set successfully.")
+        print_and_store_log("Time set successfully.")
     except OSError as err:
-        print("Error setting time with NTP:", err)
+        print_and_store_log("Error setting time with NTP: {err}")
 
 def is_dst_paris(dt_tuple):
     """ Get the Paris Time """
@@ -100,7 +104,7 @@ def show_rtc_time():
     minute = dt_tuple[5]
     second = dt_tuple[6]
     time_str = f"{hour:02}:{minute:02}:{second:02}"
-    print(time_str)
+    #print(time_str)
     return hour, minute, second
 
 def show_rtc_date():
@@ -139,16 +143,17 @@ def show_freq():
 def set_freq(freq):
     """
     Set the freq in MHz
-    frequency must be 20MHz, 40MHz, 80Mhz, 160MHz or 240MHz
+    ESP32-S3: frequency must be 20MHz, 40MHz, 80Mhz, 160MHz or 240MHz
     """
+    print_and_store_log(f"Set frequency to {freq}MHz")
     machine.freq(freq*1000000)
 
 def print_info():
     """ Print the info """
     mem_stats = get_memory_info()
-    print(f"Memory Allocated: {mem_stats['allocated_bytes']} bytes")
-    print(f"Memory Free: {mem_stats['free_bytes']} bytes")
-    print(f"Total Heap: {mem_stats['total_heap_bytes']} bytes")
-    print(f"Memory Usage: {mem_stats['allocated_percentage']:.2f}%")
+    print_and_store_log(f"Memory Allocated: {mem_stats['allocated_bytes']} bytes")
+    print_and_store_log(f"Memory Free: {mem_stats['free_bytes']} bytes")
+    print_and_store_log(f"Total Heap: {mem_stats['total_heap_bytes']} bytes")
+    print_and_store_log(f"Memory Usage: {mem_stats['allocated_percentage']:.2f}%")
     freq = show_freq()
-    print(f"Current CPU frequency: {freq} MHz")
+    print_and_store_log(f"Current CPU frequency: {freq} MHz")
