@@ -98,7 +98,7 @@ def serve_config_page():
 <body>
     <div class="container">
         <h1>Configuration pour la {DOOR}</h1>
-        <form id="configF" action="/save_config" method="post">
+        <form id="configF" action="/SAVE_config" method="POST">
             <div class="group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
