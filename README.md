@@ -22,6 +22,8 @@ Control a Pool shutter
 * Under Devel: File management to udpate the system
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_config.jpg)
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_log.jpg)
 
 # parking_detection
 
