@@ -3,9 +3,9 @@
 import socket
 import network
 import utime
-from machine import Pin, SoftI2C
 import _thread
 import gc
+from machine import Pin
 import esp32 # get MCU temp
 
 # Internal libs
@@ -147,7 +147,6 @@ def handle_request(cl, request):
     elif request.startswith('GET /SAVE_config'):
         response_content = w_c.serve_config_page()
     elif request.startswith('POST /SAVE_config'):
-        print(request)
         response_from_save_config = s_c.save_configuration(request)
         if response_from_save_config.startswith("HTTP/1.1 30"):
             cl.sendall(response_from_save_config.encode('utf-8'))
@@ -208,7 +207,7 @@ def main():
         oled_d.text('ique', 0, 40)
         oled_d.text('ag@ginies.org', 0, 50)
         oled_d.show()
-        utime.sleep(2)
+        utime.sleep(1)
     if oled_d:
         oled_d.fill(0)
 
