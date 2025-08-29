@@ -188,9 +188,11 @@ def handle_client_connection(sock):
         if client_ip not in connected_ips:
             d_u.print_and_store_log(f"Client connecté depuis {addr}")
             connected_ips.add(client_ip)
-        request = cl.recv(4192)
+        # disable Nagle algo
+        #cl.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        request = cl.recv(8192)
         #print(request)
-        handle_request(cl, request)
+        handle_request(cl, sock, request)
     except OSError as err:
         if err.args[0] == errno.EAGAIN:
             pass
@@ -238,13 +240,12 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
         response_content = "Duplicate request " + B_text
     content_type = "text/plain"
 
-def handle_request(cl, request):
+def handle_request(cl, sock, request):
     """ Handle incoming HTTP requests """
 
     response_content = ""
     status_code = "200 OK"
     content_type = "text/html"
-    full_request = request
 
     if b'/BP1_ACTIF' in request:
         thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
@@ -291,6 +292,32 @@ def handle_request(cl, request):
             }
         response_content = ujson.dumps(status_data)
         content_type = "application/json"
+
+#    elif request.startswith('GET /OTA_update'):
+#        d_u.print_and_store_log("OTA_update displayed")
+#        response_content = w_o.serve_ota_page()
+#
+#    elif request.startswith('POST /OTA_update'):
+#        d_u.print_and_store_log("OTA_update in progress")
+#        response_content = w_o.handle_ota_update(request)
+#        if response_content.startswith("HTTP/1.1 30"):
+#            cl.send("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n")
+#            cl.send("Mise à jour terminée.")
+#            cl.close()
+#            return
+    elif request.startswith('GET /UPLOAD_file'):
+        d_u.print_and_store_log("UPLOAD_file displayed")
+        response_content = w_f_m.serve_file_management_page()
+    elif request.startswith('POST /UPLOAD_file'):
+        d_u.print_and_store_log("UPLOAD_file file in progress")
+        response_from_file_m = w_f_m.handle_upload(cl, sock, request)
+        cl.sendall(response_from_file_m.encode('utf-8'))
+        utime.sleep(1)
+
+    elif request.startswith('GET /file_management'):
+        d_u.print_and_store_log("Show File management web page")
+        response_content = w_f_m.serve_file_management_page()
+
     elif request.startswith('GET /SAVE_config'):
         response_content = w_c.serve_config_page()
     elif request.startswith('POST /SAVE_config'):
@@ -302,6 +329,7 @@ def handle_request(cl, request):
             return
         else:
             response_content = response_from_save_config
+
     elif b'/log.txt' in request:
         try:
             with open('/log.txt', 'r') as file:
@@ -316,6 +344,29 @@ def handle_request(cl, request):
         response_content = w_cmd.create_log_page()
         content_type = "text/html"
         status_code = "200 OK"
+
+    elif b'/view' in request and request.startswith(b'GET'):
+        request_str = request.decode('utf-8')
+        file_to_view = request_str.split('file=', 1)[1].split(' ')[0]
+        try:
+            if file_to_view == "config_var.py":
+                # Dont show config_var with all code access
+                response_content = "File not Allowed!"
+                content_type = "text/plain"
+                status_code = "404 Not Found"
+            elif d_u.file_exists("/"+file_to_view):
+                response_content = w_f_m.create_view_file_page("/"+file_to_view)
+                content_type = "text/html"
+                status_code = "200 OK"
+            else:
+                response_content = "File not found"
+                content_type = "text/plain"
+                status_code = "404 Not Found"
+        except IndexError:
+            response_content = "Bad request: file parameter missing"
+            content_type = "text/plain"
+            status_code = "400 Bad Request"
+
     elif b'/file_management' in request:
         response_content = w_f_m.serve_file_management_page()
     elif request.startswith('GET /delete'):
@@ -327,46 +378,6 @@ def handle_request(cl, request):
             response_content = "File deleted. <a href='/file_management'>Return to File Manager</a>"
         except OSError as e:
             response_content = f"Error deleting file: {e}"
-    elif request.startswith('/upload'):
-        try:
-            d_u.print_and_store_log("Starting file upload process.")
-            headers_end = full_request.find(b'\r\n\r\n')
-            if headers_end == -1:
-                raise ValueError("Headers end not found.")
-            headers = full_request[:headers_end]
-            boundary_match = re.search(b'boundary=([^\r\n]+)', headers)
-            if not boundary_match:
-                raise ValueError("Boundary not found in headers.")
-            boundary = boundary_match.group(1)
-
-            filename_match = re.search(b'filename="([^"]+)"', headers)
-            if not filename_match:
-                raise ValueError("Filename not found in headers.")
-            filename = filename_match.group(1).decode('utf-8')
-
-            d_u.print_and_store_log(f"Found boundary: {boundary.decode()} and filename: {filename}")
-            body_start_index = headers_end + 4
-            first_chunk = full_request[body_start_index:]
-            with open("/" + filename, 'wb') as f:
-                f.write(first_chunk)
-                while True:
-                    chunk = cl.recv(1024)
-                    if not chunk:
-                        break # Connection closed or timeout
-                    if b'--' + boundary + b'--' in chunk:
-                        end_index = chunk.find(b'--' + boundary + b'--')
-                        f.write(chunk[:end_index - 2]) # -2 to remove trailing CRLF
-                        break
-                    else:
-                        f.write(chunk)
-
-            d_u.print_and_store_log(f"File {filename} uploaded successfully to the root directory.")
-            response_content = f"File {filename} uploaded. <a href='/file_management'>Return to File Manager</a>".encode('utf-8')
-
-        except Exception as e:
-            d_u.print_and_store_log(f"Error uploading file: {e}")
-            response_content = f"Error uploading file: {e}".encode('utf-8')
-            status_code = b"500 Internal Server Error"
     else:
         response_content = w_cmd.create_html_response()
         content_type = "text/html"
@@ -407,8 +418,9 @@ def main():
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
     # Start up info
+    #d_u.unpack_files_with_sha256("update.bin", "/test")
     info_start = "#############--- Guibo Control ---############# "
-    d_u.check_and_delete_if_too_big("/log.txt", 2)
+    d_u.check_and_delete_if_too_big("/log.txt", 0.256)
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
