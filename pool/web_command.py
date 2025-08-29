@@ -228,9 +228,10 @@ def create_html_response():
     <div class="footer">
         <div class="footer-buttons">
             <button id="SAVE_config" class="config-button">Configurer</button>
-            <a href="mailto:antoine@ginies.org" class="config-button">antoine@ginies.org</a>
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
-        </div>
+            <a href="/file_management" target="_blank" class="config-button">Explorer</a>
+            <a href="mailto:antoine@ginies.org" class="config-button">antoine@ginies.org</a>
+    </div>
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', function() {{
@@ -513,22 +514,9 @@ def create_log_page():
         h1 {{
             text-align: center;
         }}
-        .back-button {{
-            display: inline-block;
-            margin-bottom: 20px;
-            padding: 10px 20px;
-            background-color: #007BFF;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-        }}
-        .back-button:hover {{
-            background-color: #0056b3;
-        }}
     </style>
 </head>
 <body>
-    <a href="/" class="back-button">Retour</a>
     <h1>Log du Système</h1>
     <div id="logContent" class="log-container">
         Chargement du log...
