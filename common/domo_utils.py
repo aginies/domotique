@@ -94,8 +94,17 @@ def unpack_files_with_sha256(packed_bin, output_dir):
     """
     Unpacks files and verifies SHA256 (MicroPython-compatible).
     """
-    with open(packed_bin, 'rb') as in_file:
-        packed_data = in_file.read()
+    try:
+            os.mkdir(output_dir)
+    except OSError:
+            pass
+
+    try:
+        with open(packed_bin, 'rb') as in_file:
+            packed_data = in_file.read()
+    except OSError as err:
+        print_and_store_log(f"Failed to read {packed_bin}: {err}")
+        return
 
     # Split data and hash
     data = packed_data[:-32]
@@ -107,6 +116,7 @@ def unpack_files_with_sha256(packed_bin, output_dir):
     sha256.update(data)
     actual_digest = sha256.digest()
     actual_hash = bytes_to_hex(actual_digest)
+
     print_and_store_log(f"AC: {actual_hash}\nEC: {expected_hash}")
     if actual_hash == expected_hash:
         print_and_store_log("sha256sum is Ok!")
@@ -125,13 +135,16 @@ def unpack_files_with_sha256(packed_bin, output_dir):
         file_data = data[offset:offset+file_size]
         offset += file_size
 
+        filename = filename.replace('/', '_').replace('\\', '_')  # Sanitize filename
+        file_path = f"{output_dir}/{filename}"
+
         # Write file
         try:
-            os.mkdir(output_dir)
-        except OSError:
-            pass
-        with open(f"{output_dir}/{filename}", 'wb') as f:
-            f.write(file_data)
+            with open(file_path, 'wb') as f:
+                f.write(file_data)
+        except OSError as err:
+            print_and_store_log(f"Failed to write {filename}: {err}")
+            continue
 
     print_and_store_log(f"Unpacked files to {output_dir} (SHA256 verified).")
 
