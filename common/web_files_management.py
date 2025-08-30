@@ -3,14 +3,14 @@ import time
 import domo_utils as d_u
 
 def handle_upload(cl, socket, request):
-    d_u.print_and_store_log("DEUBG Test upload")
     try:
+        # Extract boundary
         boundary_start = request.find(b"boundary=")
         if boundary_start == -1:
             return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBoundary non trouvé"
-
         boundary_end = request.find(b"\r\n", boundary_start)
         boundary = request[boundary_start + 9:boundary_end]
+        closing_boundary = b"\r\n--" + boundary + b"--"
 
         filename_start = request.find(b'filename="', boundary_end) + 10
         filename_end = request.find(b'"', filename_start)
@@ -20,18 +20,19 @@ def handle_upload(cl, socket, request):
         data_start = request.find(b"\r\n\r\n", filename_end) + 4
         body = request[data_start:]
 
-        boundary_close = b"\r\n--" + boundary
-        data_end = body.find(boundary_close)
         start_time = time.time()
         total_bytes = 0
-        with open(filename, "wb") as f:
-            if data_end != -1:
+        data_end = body.find(closing_boundary)
+        if data_end != -1:
+            with open(filename, "wb") as f:
                 f.write(body[:data_end])
-                total_bytes += len(body[:data_end])
-            else:
+            d_u.print_and_store_log(f"File uploaded successfully. Total bytes: {len(body[:data_end])}")
+        else:
+            with open(filename, "wb") as f:
                 f.write(body)
-                total_bytes += len(body)
+                total_bytes = len(body)
                 remaining = b""
+                d_u.print_and_store_log(f"Initial chunk: {len(body)} bytes. Waiting for more data...")
 
                 while True:
                     chunk = cl.recv(8192)
@@ -40,17 +41,20 @@ def handle_upload(cl, socket, request):
                         return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBoundary non trouvé (connexion fermée)"
 
                     full_chunk = remaining + chunk
-                    data_end = full_chunk.find(boundary_close)
+                    data_end = full_chunk.find(closing_boundary)
 
                     if data_end != -1:
                         f.write(full_chunk[:data_end])
                         total_bytes += len(full_chunk[:data_end])
+                        d_u.print_and_store_log(f"Final chunk: {len(full_chunk[:data_end])} bytes. Total bytes: {total_bytes}")
                         break
                     else:
-                        f.write(full_chunk)
-                        total_bytes += len(full_chunk)
-                        remaining = full_chunk[-len(boundary_close):]
-                        d_u.print_and_store_log(f"From {filename}, Received: {len(full_chunk)} bytes (chunk size)")
+                        bytes_to_write = len(full_chunk) - len(closing_boundary)
+                        if bytes_to_write > 0:
+                            f.write(full_chunk[:bytes_to_write])
+                            total_bytes += bytes_to_write
+                        d_u.print_and_store_log(f"Received {len(full_chunk)} bytes. Total so far: {total_bytes}. Waiting for more data...")
+                        remaining = full_chunk[-len(closing_boundary):]
 
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -60,7 +64,6 @@ def handle_upload(cl, socket, request):
 
         if filename == "update.bin":
             manage_update("update.bin", "/test")
-
         return "HTTP/1.1 303 See Other\r\nLocation: /\r\n\r\n"
 
     except Exception as err:
