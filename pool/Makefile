@@ -24,5 +24,5 @@ $(UPDATEBIN):
 .PHONY: clean
 clean:
 	@echo "Cleaning up..."
-	@rm -rf temp_$(NAME) $(UPDATEBIN) unpacked_files
+	@rm -rf temp_$(NAME) $(UPDATEBIN) unpacked_files unpacked
 	@echo "Cleanup complete."
