@@ -86,6 +86,19 @@ def copy_file(source_path, dest_path):
         print_and_store_log(f"An error occurred: {err}")
         return False
 
+def manage_update(filename, output_dir):
+    """ Function to extract filename bin """
+    print_and_store_log("Update detected! Extracting")
+    try:
+        unpack_files_with_sha256(filename, output_dir)
+        print_and_store_log(f"Successfully extracted {filename}")
+        os.remove(filename)
+        print_and_store_log(f"Deleted {filename} after extraction")
+        print_and_store_log("Backing file config_var.py")
+        copy_file("/config_var.py", "/config_var.py.bck")
+    except Exception as err:
+        print_and_store_log(f"Failed to extract {filename}: {err}")
+
 def bytes_to_hex(bytes_data):
     """Convert bytes to a hexadecimal string."""
     return ''.join(['{:02x}'.format(b) for b in bytes_data])

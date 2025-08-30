@@ -63,23 +63,12 @@ def handle_upload(cl, socket, request):
             d_u.print_and_store_log(f"Upload time for {filename}: {elapsed_time:.2f} seconds ({total_bytes / 1024 / elapsed_time:.2f} KB/s)")
 
         if filename == "update.bin":
-            manage_update("update.bin", "/test")
+            d_u.manage_update("update.bin", "/test")
         return "HTTP/1.1 303 See Other\r\nLocation: /\r\n\r\n"
 
     except Exception as err:
         d_u.print_and_store_log(f"Erreur : {err}")
         return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nErreur lors de l'upload"
-
-def manage_update(filename, output_dir):
-    """ Function to extract filename bin """
-    d_u.print_and_store_log(f"Update detected! Extracting")
-    try:
-        d_u.unpack_files_with_sha256(filename, output_dir)
-        d_u.print_and_store_log(f"Successfully extracted {filename}")
-        #os.remove(filename)
-        #d_u.print_and_store_log(f"Deleted {filename} after extraction")
-    except Exception as err:
-        d_u.print_and_store_log(f"Failed to extract {filename}: {err}")
 
 def serve_file_management_page():
     """Get a list of all files in the root directory and generate the HTML page."""
