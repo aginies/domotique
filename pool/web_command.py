@@ -196,6 +196,21 @@ def create_html_response():
         .config-button:hover {{
             background-color: #218838;
         }}
+        .config-button-s {{
+            display: inline-block;
+            padding: 8px 16px;
+            font-size: 6px;
+            color: white;
+            background-color: #373837;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }}
+        .config-button-s:hover {{
+            background-color: #218838;
+        }}
         .footer-buttons {{
             display: flex;
             justify-content: center;
@@ -231,6 +246,7 @@ def create_html_response():
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
             <a href="/file_management" target="_blank" class="config-button">Explorer</a>
             <a href="mailto:antoine@ginies.org" class="config-button">antoine@ginies.org</a>
+            <a href="/revert_mode" target="_blank" class="config-button-s">Revert</a>
     </div>
     </div>
     <script>
@@ -478,6 +494,7 @@ def create_html_response():
             window.location.href = '/SAVE_config';
         }});
         document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
+
         updateStatus(); // Initial button status update
         setInterval(updateStatus, 1000);
     }}); // End of DOMContentLoaded listener
