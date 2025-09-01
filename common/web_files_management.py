@@ -1,3 +1,6 @@
+# antoine@ginies.org
+# GPL3
+
 import os
 import time
 import domo_utils as d_u
@@ -63,7 +66,7 @@ def handle_upload(cl, socket, request):
             d_u.print_and_store_log(f"Upload time for {filename}: {elapsed_time:.2f} seconds ({total_bytes / 1024 / elapsed_time:.2f} KB/s)")
 
         if filename == "update.bin":
-            d_u.manage_update("update.bin", "/test")
+            d_u.manage_update("update.bin", "/update")
         return "HTTP/1.1 303 See Other\r\nLocation: /\r\n\r\n"
 
     except Exception as err:
@@ -228,6 +231,41 @@ def serve_file_management_page():
         .view-button:hover {{
             background-color: #2980b9;
         }}
+        .log-display {{
+            background-color: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            height: 300px; /* Adjust height as needed */
+            overflow-y: scroll;
+        }}
+        .warning-text {{
+            color: red;
+        }}
+        .upload-text {{
+            color: green;
+        }}
+        .upload-status {{
+            font-weight: bold;
+            color: #3498db;
+            margin-top: 10px;
+        }}
+        .upload-button {{
+            padding: 10px 25px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }}
+        .upload-button:hover {{
+            background-color: #0056b3;
+        }}
     </style>
 </head>
 <body>
@@ -264,20 +302,85 @@ def serve_file_management_page():
     <div class="container">
         <h1>Upload a file</h1>
         <div class="upload-form">
-        <form action="/UPLOAD_file" method="POST" enctype="multipart/form-data">
+        <form id="uploadForm" action="/UPLOAD_file" method="POST" enctype="multipart/form-data">
             <input type="file" name="file" accept=".py,.txt,.bin">
-            <button type="submit">Upload</button>
+            <button class="upload-button" type="submit">Upload</button>
         </form>
+        <div id="uploadStatus" class="upload-status" style="display: none;">
+        Uploading... Please wait.
         </div>
+    </div>
+    <div class="container">
+        <h2>Log.txt</h2>
+        <pre id="log-display"></pre>
     </div>
     <script>
         const usedPercentage = {used_percentage};
         document.getElementById('diskBar').style.width = usedPercentage + '%';
+        function fetchLog() {{
+            fetch('/get_log')
+                .then(response => {{
+                    if (response.ok) {{
+                        return response.text();
+                    }}
+                    throw new Error('Failed to fetch log file.');
+                }})
+                .then(logText => {{
+                    const logDisplay = document.getElementById('log-display');
+                    const lines = logText.split('\\n');
+                    let styledHtml = '';
+
+                    lines.forEach(line => {{
+                        if (line.includes('WARNING')) {{
+                            styledHtml += `<span class="warning-text">${{line}}</span>\\n`;
+                        }} else if (line.includes('UPDATE')) {{
+                            styledHtml += `<span class="upload-text">${{line}}</span>\n`;
+                        }} else {{
+                            styledHtml += `${{line}}\\n`;
+                        }}
+                    }});
+
+                    logDisplay.innerHTML = styledHtml;
+                    logDisplay.scrollTop = logDisplay.scrollHeight;
+                }})
+                .catch(error => console.error('Error:', error));
+        }}
+
+        fetchLog();
+        setInterval(fetchLog, 300);
+
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadStatusDiv = document.getElementById('uploadStatus');
+        uploadForm.addEventListener('submit', function(event) {{
+            // Check if a file is selected
+            if (!uploadForm.elements['file'].files.length) {{
+                return; // Let the browser handle the "required" validation
+            }}
+            uploadStatusDiv.style.display = 'block';
+            setTimeout(() => {{
+                uploadForm.submit();
+            }}, 100);
+            event.preventDefault();
+        }});
+        window.addEventListener('load', function() {{
+            uploadStatusDiv.style.display = 'none';
+        }});
     </script>
 </body>
 </html>
 """
     return html
+
+def serve_log_file():
+    try:
+        with open("log.txt", "r") as f:
+            log_lines = f.readlines()
+            # Get the last 10 lines, or fewer if the file has less than 10 lines
+            last_10_lines = log_lines[-10:]
+            log_content = "".join(last_10_lines)
+            return "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n" + log_content
+    except OSError:
+        return "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nLog file not found"
 
 def create_view_file_page(file_path):
     """Generate an HTML page to display the content of a file with Python syntax highlighting."""
