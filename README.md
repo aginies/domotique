@@ -24,7 +24,9 @@ Control a Pool shutter
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_web.jpg)
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_config.jpg)
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_config_02.jpg)
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_log.jpg)
+![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/file_management.jpg)
 
 # parking_detection
 
