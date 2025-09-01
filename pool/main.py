@@ -4,7 +4,6 @@ import socket
 import utime
 import os
 import ujson
-import _thread
 from machine import Pin
 import esp32 # get MCU temp
 import gc
@@ -20,9 +19,8 @@ import domo_wifi as d_w
 import web_config as w_c
 import save_config as s_c
 import web_files_management as w_f_m
-
-lock = _thread.allocate_lock()
-shared_counter = 0
+import web_log as w_l
+import crtl_relay as c_r
 
 # LIST OF CONNECTED CLIENTS
 connected_ips = set()
@@ -35,13 +33,9 @@ door_sensor = Pin(c_v.DOOR_SENSOR_PIN, Pin.IN, Pin.PULL_UP)
 door_state = door_sensor.value()
 prev_door_state = door_state
 
-# RELAY for BP1 and BP2
-# Be sure to put max power to the pin to control the relay
-last_ctrl_relay_time = 0
-relay1 = Pin(c_v.RELAY1_PIN, Pin.OUT, drive=Pin.DRIVE_3)
-relay1.off()
-relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
-relay2.off()
+# SEtting OFF RELAY for BP1 and BP2
+c_r.relay1.off()
+c_r.relay2.off()
 
 # At start we can only Open the Pool
 # remove all previous ERROR
@@ -95,90 +89,11 @@ def oled_constant_show():
             elif d_u.file_exists('/BP2'):
                 oled_d.text("En Fermeture", 0, 50)
             else:
-                oled_d.text("En Fonctionement", 0, 50)
+                oled_d.text("", 0, 50)
         if d_u.file_exists('/EMERGENCY_STOP'):
             oled_d.text("", 0, 50)
             oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
-
-def ctrl_relay(which_one, duration, adjust):
-    """ relay 1 or 2, now non-blocking """
-    lock.acquire()
-
-    if which_one == 1:
-        relay = relay1
-        active_file = '/BP1'
-        inactive_file = '/BP2'
-    else:
-        relay = relay2
-        active_file = '/BP2'
-        inactive_file = '/BP1'
-
-    with open('/IN_PROGRESS', 'w') as file:
-        file.write('This file was created by clicking BP1 or BP2.')
-    try:
-        # internal_led_blink(pink, led_off, 3, c_v.time_ok) # Keep if non-blocking
-        relay.on()
-        d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
-        start_time = utime.time()
-        while utime.time() - start_time < duration:
-            if check_stop_relay():
-                d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
-                relay.off()
-                break
-            utime.sleep_ms(50)
-
-        if relay.value() == 1:
-            relay.off()
-
-        if not check_stop_relay():
-            if not adjust:
-                d_u.print_and_store_log("Full action in progress")
-                d_u.print_and_store_log(f"Creating {active_file}")
-                with open(active_file, 'w') as file:
-                    file.write(f'This file was created by clicking BP{which_one}.')
-                try:
-                    os.remove(inactive_file)
-                except OSError:
-                    pass
-                try:
-                    os.remove("/EMERGENCY_STOP")
-                except OSError:
-                    pass
-            else:
-                d_u.print_and_store_log("Adjustement in progress")
-        else:
-            # If stopped by emergency, ensure files are cleared
-            try:
-                os.remove("/BP1")
-            except OSError:
-                pass
-            try:
-                os.remove("/BP2")
-            except OSError:
-                pass
-        try:
-            os.remove("/IN_PROGRESS")
-        except OSError:
-            pass
-        lock.release()
-        gc.collect()
-
-    except Exception as err:
-        d_u.print_and_store_log(f"Error in ctrl_relay({which_one}): {err}")
-        relay1.off()
-        relay2.off()
-        # internal_led_blink(pink, led_off, 5, c_v.time_err)
-        ERR_CTRL_RELAY = True
-
-def check_stop_relay():
-    d_u.file_exists("/EMERGENCY_STOP")
-
-def ctrl_relay_off():
-    """ Force all relay Off! """
-    d_u.print_and_store_log("Relays forced OFF, stop_relay_action set to True.")
-    relay1.off()
-    relay2.off()
 
 def handle_client_connection(sock):
     """ At client connection send html stuff """
@@ -205,40 +120,18 @@ def handle_client_connection(sock):
             pass # cl might not be defined if accept() failed
         pass
 
-def thread_do_job_crtl_relay(B_text, relay_nb, duration):
-    """ Do the thread job for the realy """
-    global last_ctrl_relay_time
-    current_time = utime.time()
-    response_content = ""
-    adjust = True
-
-    if current_time - last_ctrl_relay_time > duration:
-        if oled_d is not None: oled_d.poweron()
-        d_u.print_and_store_log(f"{B_text} activé")
-        last_ctrl_relay_time = current_time
-        if B_text != "OPEN_B" and B_text != "CLOSE_B":
-            adjust = False
-            d_u.print_and_store_log(f"Will Create /{B_text} file")
-        else:
-            adjust = True
-            d_u.print_and_store_log(f"Will Not Create any files")
-        if B_text == "BP1":
-            try:
-                os.remove("/BP2")
-            except OSError:
-                pass # BP2 might not exist
-        elif B_text == "BP2":
-            try:
-                os.remove("/BP1")
-            except OSError:
-                pass # BP1 might not exist
-
-        _thread.start_new_thread(ctrl_relay, (relay_nb, duration, adjust))
-        response_content = B_text + " activated"
-    else:
-        d_u.print_and_store_log(f"{B_text} Duplicate request seen...")
-        response_content = "Duplicate request " + B_text
-    content_type = "text/plain"
+def redirect_to_slash(cl):
+    """ Redirect to / """
+    redirect_url = "/"
+    response_headers = [
+        "HTTP/1.1 303 See Other",
+        f"Location: {redirect_url}",
+        "Connection: close",
+        "",
+    ]
+    response = "\r\n".join(response_headers)
+    cl.sendall(response.encode())
+    cl.close()
 
 def handle_request(cl, sock, request):
     """ Handle incoming HTTP requests """
@@ -248,24 +141,24 @@ def handle_request(cl, sock, request):
     content_type = "text/html"
 
     if b'/BP1_ACTIF' in request:
-        thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
+        c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
 
     elif b'/OPEN_B_ACTIF' in request:
-        thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
+        c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
 
     elif b'/CLOSE_B_ACTIF' in request:
-        thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
+        c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
 
     elif b'/BP2_ACTIF' in request:
-        thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
+        c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
 
-    elif b'/EMERGENCY_STOP' in request:
+    elif request.startswith('GET /EMERGENCY_STOP'):
         if oled_d is not None: oled_d.poweron()
         d_u.print_and_store_log("Emergency Stop activé!")
         with open('/EMERGENCY_STOP', 'w') as file:
             file.write('Emergency stop is active and requires reboot.')
         d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
-        ctrl_relay_off()
+        c_r.ctrl_relay_off()
         # Remove both /BP1 and /BP2 files to reflect that no operation is active.
         # This ensures the /status endpoint returns False for both active flags.
         try:
@@ -293,18 +186,6 @@ def handle_request(cl, sock, request):
         response_content = ujson.dumps(status_data)
         content_type = "application/json"
 
-#    elif request.startswith('GET /OTA_update'):
-#        d_u.print_and_store_log("OTA_update displayed")
-#        response_content = w_o.serve_ota_page()
-#
-#    elif request.startswith('POST /OTA_update'):
-#        d_u.print_and_store_log("OTA_update in progress")
-#        response_content = w_o.handle_ota_update(request)
-#        if response_content.startswith("HTTP/1.1 30"):
-#            cl.send("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n")
-#            cl.send("Mise à jour terminée.")
-#            cl.close()
-#            return
     elif request.startswith('GET /UPLOAD_file'):
         d_u.print_and_store_log("UPLOAD_file displayed")
         response_content = w_f_m.serve_file_management_page()
@@ -341,11 +222,16 @@ def handle_request(cl, sock, request):
             content_type = "text/plain"
             status_code = "404 Not Found"
     elif b'/livelog' in request and request.startswith(b'GET'):
-        response_content = w_cmd.create_log_page()
+        response_content = w_l.create_log_page()
         content_type = "text/html"
         status_code = "200 OK"
+    
+    elif b'/get_log' in request:
+        response = w_f_m.serve_log_file()
+        cl.sendall(response.encode('utf-8'))
 
     elif b'/view' in request and request.startswith(b'GET'):
+        d_u.print_and_store_log("Entering view file")
         request_str = request.decode('utf-8')
         file_to_view = request_str.split('file=', 1)[1].split(' ')[0]
         try:
@@ -369,6 +255,21 @@ def handle_request(cl, sock, request):
 
     elif b'/file_management' in request:
         response_content = w_f_m.serve_file_management_page()
+
+    elif b'/revert_mode' in request:
+        d_u.print_and_store_log("Entering Revert mode")
+        if d_u.file_exists('/BP1'):
+            d_u.print_and_store_log("Revert mode creating BP2")
+            os.remove("/BP1")
+            with open('/BP2', 'w') as file:
+                file.write('Create BP2 after revert')
+        elif d_u.file_exists('/BP2'):
+            d_u.print_and_store_log("Revert mode creating BP1")
+            os.remove("/BP2")
+            with open('/BP1', 'w') as file:
+                file.write('Create BP1 after revert')
+        redirect_to_slash(cl)
+        return
     elif request.startswith('GET /delete'):
         request_str = request.decode('utf-8')
         file_to_delete = request_str.split('file=', 1)[1].split(' ')[0]
