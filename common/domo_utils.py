@@ -86,16 +86,66 @@ def copy_file(source_path, dest_path):
         print_and_store_log(f"An error occurred: {err}")
         return False
 
+def get_vars_from_file(config_file):
+    """
+    Parses a configuration file and returns a set of variable names.
+    """
+    variables = set()
+    try:
+        with open(config_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    # Split at the first '=' to get the variable name
+                    var_name = line.split('=')[0].strip()
+                    variables.add(var_name)
+    except FileNotFoundError:
+        print_and_store_log(f"Error: The file '{config_file}' was not found.")
+        sys.exit(1)
+    return variables
+
+def check_config_files(old_config_path, new_config_path):
+    """
+    Checks if two configuration files have the same variables.
+    If not, it prints the missing variables.
+    """
+    old_vars = get_vars_from_file(old_config_path)
+    new_vars = get_vars_from_file(new_config_path)
+    missing_vars = new_vars - old_vars
+
+    if not missing_vars:
+        print_and_store_log("UPDATE: The configuration files have the same variables.")
+        print_and_store_log("UPDATE: Restoring old config file.")
+        copy_file("/config_var.py.bck", "/config_var.py")
+        os.remove("/config_var.py.bck")
+    else:
+        print_and_store_log("UPDATE WARNING: The old configuration file is missing the following variables:")
+        for var in sorted(list(missing_vars)):
+            print_and_store_log(f" - {var}")
+        print_and_store_log("UPDATE WARNING: Please add these variables to your old configuration file.")
+        print_and_store_log("UPDATE: I can not restore the old config file.")
+
 def manage_update(filename, output_dir):
     """ Function to extract filename bin """
-    print_and_store_log("Update detected! Extracting")
+    print_and_store_log("UPDATE: Update detected! Extracting")
     try:
         unpack_files_with_sha256(filename, output_dir)
-        print_and_store_log(f"Successfully extracted {filename}")
+        print_and_store_log(f"UPDATE: Successfully extracted {filename}")
         os.remove(filename)
-        print_and_store_log(f"Deleted {filename} after extraction")
-        print_and_store_log("Backing file config_var.py")
-        copy_file("/config_var.py", "/config_var.py.bck")
+        print_and_store_log(f"UPDATE: Deleted {filename} after extraction")
+        print_and_store_log("UPDATE: Backing file config_var.py")
+        if file_exists("/config_var.py"):
+            copy_file("/config_var.py", "/config_var.py.bck")
+        files_to_copy = os.listdir(output_dir)
+
+        for f_to_copy in files_to_copy:
+            print_and_store_log(f"{output_dir}/{f_to_copy}, {f_to_copy}")
+            #copy_file(output_dir+"/"+f_to_copy, "/"+f_to_copy)
+        check_config_files("config_var.py.bck", "config_var.py")
+        print_and_store_log("UPDATE WARNING: Update done, please reboot/restart the system")
+        for f_to_delete in files_to_copy:
+            os.remove(output_dir+"/"+f_to_delete)
+        os.remove(output_dir)
     except Exception as err:
         print_and_store_log(f"Failed to extract {filename}: {err}")
 
@@ -116,7 +166,7 @@ def unpack_files_with_sha256(packed_bin, output_dir):
         with open(packed_bin, 'rb') as in_file:
             packed_data = in_file.read()
     except OSError as err:
-        print_and_store_log(f"Failed to read {packed_bin}: {err}")
+        print_and_store_log(f"UPDATE: Failed to read {packed_bin}: {err}")
         return
 
     # Split data and hash
@@ -130,12 +180,13 @@ def unpack_files_with_sha256(packed_bin, output_dir):
     actual_digest = sha256.digest()
     actual_hash = bytes_to_hex(actual_digest)
 
-    print_and_store_log(f"AC: {actual_hash}\nEC: {expected_hash}")
+    print_and_store_log(f"UPDATE: Actual Hash {actual_hash}")
+    print_and_store_log(f"UPDATE: Expected Hash {expected_hash}")
     if actual_hash == expected_hash:
-        print_and_store_log("sha256sum is Ok!")
+        print_and_store_log("UPDATE: sha256sum is Ok!")
     else:
         #raise ValueError("SHA256 checksum mismatch! The file may be corrupted.")
-        print_and_store_log("SHA256 checksum mismatch! The file may be corrupted.")
+        print_and_store_log("UPDATE WARNING: SHA256 checksum mismatch! The file may be corrupted.")
     # Unpack files
     offset = 0
     while offset < len(data):
@@ -156,10 +207,10 @@ def unpack_files_with_sha256(packed_bin, output_dir):
             with open(file_path, 'wb') as f:
                 f.write(file_data)
         except OSError as err:
-            print_and_store_log(f"Failed to write {filename}: {err}")
+            print_and_store_log(f"UPDATE WARNING: Failed to write {filename}: {err}")
             continue
 
-    print_and_store_log(f"Unpacked files to {output_dir} (SHA256 verified).")
+    print_and_store_log(f"UPDATE: Unpacked files to {output_dir} (SHA256 verified).")
 
 def set_time_with_ntp():
     try:
