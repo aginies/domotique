@@ -11,7 +11,7 @@ import config_var as c_v
 import domo_utils as d_u
 
 def deactivate_active_interfaces():
-    """ Désactiver les interfaces réseau actives """
+    """ Disable network interface """
     sta_if = network.WLAN(network.STA_IF)
     if sta_if.active():
         sta_if.active(False)
@@ -20,7 +20,7 @@ def deactivate_active_interfaces():
         ap_if.active(False)
 
 def connect_to_wifi():
-    """ Connecte a un réseau Wifi Existant"""
+    """ Connect to an existing network """
     deactivate_active_interfaces()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.active():
@@ -39,24 +39,24 @@ def connect_to_wifi():
         if o_s.oled_d:
             o_s.oled_d.fill(0)
             o_s.oled_show_text_line(info, 10)
-        utime.sleep(2)
+        utime.sleep(3)
     if o_s.oled_d:
         o_s.oled_d.fill(1)
         o_s.oled_d.fill(0)
     if sta_if.isconnected():
-        d_u.print_and_store_log("Connecte au WiFi OK")
-        d_u.print_and_store_log(f"Config Réseau: {sta_if.ifconfig()}")
+        d_u.print_and_store_log(f"Connection to WiFi {c_v.WIFI_SSID} OK")
+        d_u.print_and_store_log(f"Network Config: {sta_if.ifconfig()}")
         e_l.internal_led_blink(e_l.white, e_l.led_off, 3, c_v.time_ok)
         return {'success': True, 'ip_address': sta_if.ifconfig()[0]}
     else:
-        d_u.print_and_store_log("Connecte au WiFi NOK!")
+        d_u.print_and_store_log("Connection to WiFi NOK!")
         e_l.internal_led_blink(e_l.white, e_l.led_off, 5, c_v.time_err)
         ERR_WIFI = True
-        d_u.print_and_store_log("Wifi AP Forcé")
+        d_u.print_and_store_log("Forcing AP Wifi")
         return {'success': False, 'ERR_WIFI': ERR_WIFI}
     
 def setup_access_point():
-    """ Configurer le point d'accès """
+    """ AP configuration """
     deactivate_active_interfaces()
     try:
         ap = network.WLAN(network.AP_IF)
@@ -78,7 +78,7 @@ def setup_access_point():
             o_s.oled_show_text_line(info, 10)
             utime.sleep(2)
 
-        d_u.print_and_store_log(f'Point d\'accès WIFI créé avec l\'adresse IP: {ap.ifconfig()[0]}')
+        d_u.print_and_store_log(f'WIFI Access Point created with IP adress: {ap.ifconfig()[0]}')
         #o_s.oled_show_text_line("AP Wifi Ok", 0)
         e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
         return ap
