@@ -4,6 +4,7 @@
 import utime
 import os
 import _thread
+import gc
 from machine import Pin
 import domo_utils as d_u
 import config_var as c_v
@@ -36,16 +37,7 @@ def ctrl_relay(which_one, duration, adjust):
         relay.on()
         d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
         start_time = utime.time()
-        while utime.time() - start_time < duration:
-            if check_stop_relay():
-                d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
-                relay.off()
-                break
-            utime.sleep_ms(50)
-
-        if relay.value() == 1:
-            relay.off()
-
+        last_print_time = start_time
         if not check_stop_relay():
             if not adjust:
                 d_u.print_and_store_log("Full action in progress")
@@ -62,6 +54,22 @@ def ctrl_relay(which_one, duration, adjust):
                     pass
             else:
                 d_u.print_and_store_log("Adjustement in progress")
+
+        while utime.time() - start_time < duration:
+            if check_stop_relay():
+                d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
+                relay.off()
+                break
+            current_time = utime.time()
+            if current_time - last_print_time >= 5:
+                elapsed_time = current_time - start_time
+                d_u.print_and_store_log(f"Relay {which_one} has been ON for {elapsed_time:.1f} seconds. ({duration - elapsed_time:.1f}s remaining).")
+                last_print_time = current_time
+            utime.sleep_ms(50)
+
+        if relay.value() == 1:
+            relay.off()
+
         else:
             # If stopped by emergency, ensure files are cleared
             try:
@@ -103,7 +111,6 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
     adjust = True
 
     if current_time - last_ctrl_relay_time > duration:
-        if oled_d is not None: oled_d.poweron()
         d_u.print_and_store_log(f"{B_text} activé")
         last_ctrl_relay_time = current_time
         if B_text != "OPEN_B" and B_text != "CLOSE_B":
