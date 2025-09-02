@@ -31,7 +31,7 @@ def internal_led_blink(color1, color2, NB, timing):
         internal_led_off()
 
 def french_flag():
-    times = 0.8
+    times = 0.4
     np[0] = blue; np.write(); utime.sleep(times)
     np[0] = white; np.write(); utime.sleep(times)
     np[0] = red; np.write(); utime.sleep(times)
