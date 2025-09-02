@@ -1,5 +1,5 @@
 NAME := pool_domotic
-VERSION := 0.9.0
+VERSION := 0.9.2
 
 COMMON_SOURCE_DIR := ../common
 FILES_TO_COPY := domo_wifi.py save_config.py domo_utils.py oled_ssd1306.py esp32_led.py web_files_management.py crtl_relay.py web_log.py
