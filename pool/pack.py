@@ -11,7 +11,8 @@ def pack_files_with_sha256(input_dir, output_bin):
 
     # List all .py files in input_dir
     py_files = [f for f in os.listdir(input_dir) if f.endswith('.py')]
-    py_files.sort()  # Ensure consistent order
+    py_files.append("VERSION")
+    py_files.sort()
 
     for filename in py_files:
         filepath = os.path.join(input_dir, filename)
