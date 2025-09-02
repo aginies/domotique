@@ -139,8 +139,8 @@ def manage_update(filename, output_dir):
         files_to_copy = os.listdir(output_dir)
 
         for f_to_copy in files_to_copy:
-            print_and_store_log(f"{output_dir}/{f_to_copy}, {f_to_copy}")
-            #copy_file(output_dir+"/"+f_to_copy, "/"+f_to_copy)
+            #print_and_store_log(f"{output_dir}/{f_to_copy}, {f_to_copy}")
+            copy_file(output_dir+"/"+f_to_copy, "/"+f_to_copy)
         check_config_files("config_var.py.bck", "config_var.py")
         print_and_store_log("UPDATE WARNING: Update done, please reboot/restart the system")
         for f_to_delete in files_to_copy:
