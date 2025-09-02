@@ -3,6 +3,9 @@
 
 import config_var
 
+with open('/VERSION', 'r') as file:
+   version = file.read().strip()
+
 # Load existing configuration
 config = {
     "DOOR": config_var.DOOR,
@@ -31,7 +34,8 @@ config = {
     "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
     "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
     "PIN_CODE": config_var.PIN_CODE,
-    "CPU_FREQ": config_var.CPU_FREQ
+    "CPU_FREQ": config_var.CPU_FREQ,
+    "VERSION": version,
 }
 
 def serve_config_page():
@@ -149,11 +153,27 @@ def serve_config_page():
             font-size: 16px;
             background-color: #f9f9f9;
         }}
+        .reset-button {{
+            background-color: #e74c3c;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }}
+        .reset-button:hover {{
+            background-color: #c0392b;
+        }}
     </style>
 </head>
 <body>
     <div class="form-container">
-        <h1>Configuration pour la {DOOR}</h1>
+        <h1>Configuration pour la {DOOR} ({VERSION})</h1>
         <form id="configForm" action="/SAVE_config" method="POST">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>
@@ -282,6 +302,7 @@ def serve_config_page():
         <div class="button-group">
         <input type="submit" value="Save Configuration">
         <a href="/" class="cancel-button">Cancel</a>
+        <a href="/RESET_device" target="_blank" class="button reset-button" onclick="return confirm('Are you sure you want to reset the device? This will cause a reboot.')">Reset Device</a>
         </div>
     </form> 
     </div>
