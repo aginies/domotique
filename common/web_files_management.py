@@ -82,7 +82,17 @@ def serve_file_management_page():
     for file in files:
         try:
             file_stats = os.stat(file)
-            if file_stats[0] & 0o170000 == 0o100000:
+            if file == "config_var.py":
+                file_table_rows += f"""
+                <tr>
+                    <td>{file}</td>
+                    <td>{formatted_date}</td>
+                    <td>{file_size_kb} KB</td>
+                    <td>
+                    </td>
+                </tr>
+                """
+            elif file_stats[0] & 0o170000 == 0o100000:
                 file_mod_timestamp = file_stats[8]
                 file_size_bytes = file_stats[6]
                 file_mod_date = time.localtime(file_mod_timestamp)
@@ -100,16 +110,6 @@ def serve_file_management_page():
                     <td>
                         <a href="/view?file={file}" class="button view-button">View</a>
                         <a href="/delete?file={file}" class="button delete-button" onclick="return confirm('Are you sure you want to delete this file?');">Delete</a>
-                    </td>
-                </tr>
-                """
-            elif file == "config_var.py":
-                file_table_rows += f"""
-                <tr>
-                    <td>{file}</td>
-                    <td>{formatted_date}</td>
-                    <td>{file_size_kb} KB</td>
-                    <td>
                     </td>
                 </tr>
                 """
