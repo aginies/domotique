@@ -4,9 +4,8 @@ import socket
 import utime
 import os
 import ujson
-from machine import Pin
+from machine import Pin, reset
 import esp32 # get MCU temp
-import gc
 import ure as re
 
 # Internal lib
@@ -78,7 +77,7 @@ def oled_constant_show():
             INFO_W = IP_ADDR +":"+ str(PORT)
             oled_d.text(INFO_W, 0, 30)
         else:
-            oled_d.text(" ! Attention !", 0, 0)
+            oled_d.text(" ! Warning !", 0, 0)
             oled_d.text(" Wifi Pas OK", 0, 10)
             oled_d.text(" ! ** !", 0, 20)
             oled_d.text("Mode degrade!", 0, 30)
@@ -101,7 +100,7 @@ def handle_client_connection(sock):
         cl, addr = sock.accept()
         client_ip = addr[0]
         if client_ip not in connected_ips:
-            d_u.print_and_store_log(f"Client connecté depuis {addr}")
+            d_u.print_and_store_log(f"Client connected from {addr}")
             connected_ips.add(client_ip)
         # disable Nagle algo
         #cl.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -154,7 +153,7 @@ def handle_request(cl, sock, request):
 
     elif request.startswith('GET /EMERGENCY_STOP'):
         if oled_d is not None: oled_d.poweron()
-        d_u.print_and_store_log("Emergency Stop activé!")
+        d_u.print_and_store_log("Emergency Stop actived!")
         with open('/EMERGENCY_STOP', 'w') as file:
             file.write('Emergency stop is active and requires reboot.')
         d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
@@ -230,6 +229,10 @@ def handle_request(cl, sock, request):
         response = w_f_m.serve_log_file()
         cl.sendall(response.encode('utf-8'))
 
+    elif b'/RESET_device' in request:
+        d_u.print_and_store_log("Reset button pressed")
+        reset()
+
     elif b'/view' in request and request.startswith(b'GET'):
         d_u.print_and_store_log("Entering view file")
         request_str = request.decode('utf-8')
@@ -272,7 +275,9 @@ def handle_request(cl, sock, request):
         return
     elif request.startswith('GET /delete'):
         request_str = request.decode('utf-8')
-        file_to_delete = request_str.split('file=', 1)[1].split(' ')[0]
+        file_to_delete_encoded = request_str.split('file=', 1)[1].split(' ')[0]
+        file_to_delete = d_u.urldecode(file_to_delete_encoded)
+        d_u.print_and_store_log(f"File {file_to_delete}")
         try:
             os.remove(file_to_delete)
             d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
@@ -319,9 +324,8 @@ def main():
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
     # Start up info
-    #d_u.unpack_files_with_sha256("update.bin", "/test")
     info_start = "#############--- Guibo Control ---############# "
-    d_u.check_and_delete_if_too_big("/log.txt", 0.256)
+    d_u.check_and_delete_if_too_big("/log.txt", 20)
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
@@ -388,7 +392,7 @@ def main():
                 e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
                 PORT = port
                 ERR_SOCKET = False
-                break  # Exit the loop if binding is successful
+                break
             except OSError as err:
                 d_u.print_and_store_log(f"Failed to bind to port {port}: {err}")
                 o_s.oled_show_text_line("", 20)
@@ -396,7 +400,7 @@ def main():
                 e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
                 ERR_SOCKET = True
         else:
-            d_u.print_and_store_log('Problème Avec le WIFI')
+            d_u.print_and_store_log('Trouble with WIFI')
             o_s.oled_show_text_line("WIFI AP NOK!", 40)
             ERR_WIFI = True
             internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
@@ -404,24 +408,24 @@ def main():
     if oled_d is None:
         ERR_OLED = True
     error_vars = {
-        'Ouverture Socket': ERR_SOCKET,
-        'Ecran OLED': ERR_OLED,
+        'Openning Socket': ERR_SOCKET,
+        'OLED Screen': ERR_OLED,
         'Wifi': ERR_WIFI,
-        'Controle du relay': ERR_CTRL_RELAY,
-        'Connection Wifi': ERR_CON_WIFI
+        'Relay Control': ERR_CTRL_RELAY,
+        'Wifi Connection': ERR_CON_WIFI
     }
     if not any(error_vars.values()):
-        d_u.print_and_store_log("Système OK")
+        d_u.print_and_store_log("System OK")
         e_l.french_flag()
     else:
-        error_messages = [f"Erreur: {var_name}" for var_name, var_value in error_vars.items() if var_value]
+        error_messages = [f"Error: {var_name}" for var_name, var_value in error_vars.items() if var_value]
         d_u.print_and_store_log(", ".join(error_messages))
 
     # We are ready
+    check_and_display_error()
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
-        check_and_display_error()
         if prev_door_state == 0 and door_state == 1:
             led.value(0)
             e_l.internal_led_color(e_l.red)
@@ -442,7 +446,6 @@ def main():
 
         if sock:
             handle_client_connection(sock)
-
         utime.sleep(0.1)
 
 if __name__ == "__main__":
