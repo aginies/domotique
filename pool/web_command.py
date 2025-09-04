@@ -76,9 +76,9 @@ def create_html_response():
         }}
         .button {{
             display: inline-block;
-            margin: 10px;
+            margin: 8px;
             flex-grow: 1;
-            padding: 24px 40px;
+            padding: 22px 36px;
             font-size: 20px;
             color: white;
             background-color: #007BFF;
@@ -184,7 +184,7 @@ def create_html_response():
         .config-button {{
             display: inline-block;
             padding: 8px 16px;
-            font-size: 12px;
+            font-size: 10px;
             color: white;
             background-color: #373837;
             border: none;
@@ -234,6 +234,9 @@ def create_html_response():
             <button id="OPEN_B" class="button-small" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} {c_v.time_adjust}sec</button>
             <button id="CLOSE_B" class="button-small" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} {c_v.time_adjust}sec</button>
         </div>
+        <div>
+            <pre id="log-display"></pre>
+        </div>
         <button id="emergencyStop" class="emergency-button" {disabled3} {button_style3}>Arrêt d'Urgence</button>
         <!--<div id="timestamp"></div>-->
         <div id="rebootMessage" class="reboot-message">
@@ -245,7 +248,7 @@ def create_html_response():
             <button id="SAVE_config" class="config-button">Configurer</button>
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
             <a href="/file_management" target="_blank" class="config-button">Explorer</a>
-            <a href="mailto:antoine@ginies.org" class="config-button">antoine@ginies.org</a>
+            <a href="mailto:antoine@ginies.org" class="config-button">Antoine</a>
             <a href="/revert_mode" target="_blank" class="config-button-s">Revert</a>
     </div>
     </div>
@@ -263,13 +266,13 @@ def create_html_response():
         const open_bButton = document.getElementById('OPEN_B');
         const close_bButton = document.getElementById('CLOSE_B');
         let emergencyActiveClient = false;
-        // Show progress bar at 100% as the curtain is closed
-        progressBar.style.width = '100%';
-        progressBar.textContent = '100%';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
         //rebootMessageDiv.style.display = 'none';
 
         // --- Progress Bar Animation Function ---
         function animateProgressBar(durationMs, startPercent, endPercent) {{
+            getLogs();
             if (currentProgressBarInterval) {{
                 clearInterval(currentProgressBarInterval);
             }}
@@ -286,8 +289,6 @@ def create_html_response():
                 }} else {{ // Decreasing (e.g., 100 to 0)
                     currentPercent = startPercent - (startPercent - endPercent) * progressFraction;
                 }}
-                
-                // Only update DOM if percentage changed significantly to avoid unnecessary redraws
                 if (Math.abs(currentPercent - lastRenderedPercent) >= 0.5 || progressFraction === 1) {{
                     progressBar.style.width = currentPercent.toFixed(0) + '%';
                     progressBar.textContent = currentPercent.toFixed(0) + '%';
@@ -306,11 +307,31 @@ def create_html_response():
                 updateBar(); // Call once to set the final state
                 return;
             }}
-            currentProgressBarInterval = setInterval(updateBar, 50);
+            currentProgressBarInterval = setInterval(updateBar, 100);
         }}
+        const logContainer = document.getElementById('log-display');
+        const getLogs = async () => {{
+            if (currentProgressBarInterval !== null) {{
+                return;
+            }}
+            try {{
+                const response = await fetch('/get_log_action');
+                if (!response.ok) {{
+                    console.error(`HTTP error! Status: ${{response.status}}`);
+                    return;
+                }}
+                const logData = await response.text();
 
+                if (logContainer.textContent !== logData) {{
+                    logContainer.textContent = logData.trim() ? logData : 'Log is empty.';
+                }}
+            }} catch (error) {{
+                console.error('Failed to fetch logs:', error);
+            }}
+        }};
         // --- Status Update Function (for buttons) ---
         function updateStatus() {{
+            getLogs()
             fetch('/status')
             .then(response => response.json())
             .then(data => {{
@@ -325,9 +346,9 @@ def create_html_response():
                     bp2Button.style.backgroundColor = 'grey';
                     emergencyButton.disabled = true;
                     open_bButton.disabled = true;
-                    open_bButton.backgroundColor = 'grey';
+                    open_bButton.style.backgroundColor = 'grey';
                     close_bButton.disabled = true;
-                    close_bButton.backgroundColor = 'grey';
+                    close_bButton.style.backgroundColor = 'grey';
                     emergencyButton.style.backgroundColor = 'grey';
                     if (currentProgressBarInterval) {{
                         clearInterval(currentProgressBarInterval);
@@ -337,14 +358,13 @@ def create_html_response():
                     rebootMessageDiv.style.display = 'none';
                     emergencyButton.disabled = false;
                     emergencyButton.style.backgroundColor = '#DC3545';
-
                     // Re-enable/disable BP1/BP2 based on their individual active states
                     if (!data.In_progress) {{
                         console.log("Nothing ongoing")
                         if (data.BP1_active) {{
                             console.log("Volet ouvert")
-                            progressBar.style.width = '0%';
-                            progressBar.textContent = '0%';
+                            progressBar.style.width = '100%';
+                            progressBar.textContent = '100%';
                         }} else if (data.BP2_active) {{
                             console.log("Volet Fermé")
                             progressBar.style.width = '100%';
@@ -384,28 +404,26 @@ def create_html_response():
                 button.classList.add('clicked');
                 setTimeout(() => {{
                     button.classList.remove('clicked');
-                }}, 300); 
+                }}, 300);
             }}
-            
-            // Start the appropriate progress bar animation immediately on click
             if (buttonId === 'BP1') {{
-                animateProgressBar(TIME_TO_OPEN_MS, 100, 0); // Animate from 100% down to 0%
+                animateProgressBar(TIME_TO_OPEN_MS, 100, 0);
+                bp1Button.disabled = true;
+                bp1Button.style.backgroundColor = 'grey';
+                bp2Button.disabled = true;
+                bp2Button.style.backgroundColor = 'grey';
             }} else if (buttonId === 'BP2') {{
-                   console.log("clic on BP2, ask pin CODE")
-                   const pin = prompt("Pour fermer entrer le code PIN:");
-                   if (pin !== "{PIN_CODE}") {{
-                        alert("Code PIN incorrect. Le volet ne se fermera pas.");
-                        return;
-                   }} else {{
-                        animateProgressBar(TIME_TO_CLOSE_MS, 0, 100); // Animate from 0% up to 100%
-                   }}
+                const pin = prompt("Pour fermer entrer le code PIN:");
+                if (pin !== "{PIN_CODE}") {{
+                    alert("Code PIN incorrect. Le volet ne se fermera pas.");
+                    return;
+                }}
+                animateProgressBar(TIME_TO_CLOSE_MS, 100, 0);
+                bp1Button.disabled = true;
+                bp1Button.style.backgroundColor = 'grey';
+                bp2Button.disabled = true;
+                bp2Button.style.backgroundColor = 'grey';
             }}
-            
-            // Immediately disable buttons to prevent double clicks and reflect current action
-            bp1Button.disabled = true;
-            bp1Button.style.backgroundColor = 'grey';
-            bp2Button.disabled = true;
-            bp2Button.style.backgroundColor = 'grey';
             fetch(endpoint, {{
                 method: 'POST'
             }})
@@ -423,14 +441,14 @@ def create_html_response():
                     const timestamp = now.toLocaleString();
                     timestampElement.textContent = timestamp;
                 }}
-                updateStatus(); // Update button statuses after successful action
+                updateStatus();
             }})
             .catch(error => {{
                 console.error('There has been a problem with your fetch operation:', error);
                 if (button) {{
                     button.classList.remove('clicked');
                 }}
-                updateStatus(); 
+                updateStatus();
             }});
         }}
         // --- Handle Emergency Stop Function ---
@@ -443,16 +461,15 @@ def create_html_response():
             bp2Button.disabled = true;
             bp2Button.style.backgroundColor = 'grey';
             open_bButton.disabled = true;
-            open_bButton.backgroundColor = 'grey';
+            open_bButton.style.backgroundColor = 'grey';
             close_bButton.disabled = true;
-            close_bButton.backgroundColor = 'grey';
+            close_bButton.style.backgroundColor = 'grey';
             emergencyButton.style.backgroundColor = 'grey';
             emergencyButton.disabled = true;
             emergencyButton.style.backgroundColor = 'grey';
             if (currentProgressBarInterval) {{
                 clearInterval(currentProgressBarInterval);
-                currentProgressBarInterval = null; // Clear the interval ID
-                // The progress bar will remain at its current position
+                currentProgressBarInterval = null;
             }}
 
             fetch('/EMERGENCY_STOP', {{
@@ -466,13 +483,12 @@ def create_html_response():
             }})
             .then(data => {{
                 console.log("Emergency Stop response:", data);
-                // After sending stop command, refresh status of main buttons
                 updateStatus(); 
             }})
             .catch(error => {{
                 console.error('Error sending emergency stop command:', error);
-                emergencyActiveClient = false; // Revert client-side flag if backend failed
-                updateStatus(); // Attempt to resynchronize
+                emergencyActiveClient = false;
+                updateStatus();
             }});
         }}
         // --- Event Listeners ---
@@ -494,10 +510,9 @@ def create_html_response():
             window.location.href = '/SAVE_config';
         }});
         document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
-
-        updateStatus(); // Initial button status update
+        updateStatus();
         setInterval(updateStatus, 1000);
-    }}); // End of DOMContentLoaded listener
+    }});
     </script>
 </body>
 </html>"""
