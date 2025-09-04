@@ -140,20 +140,24 @@ def handle_request(cl, sock, request):
     content_type = "text/html"
 
     if b'/BP1_ACTIF' in request:
+        d_u.print_and_store_log(f"ACTION: {c_v.nom_bp1} Complete ")
         c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
 
     elif b'/OPEN_B_ACTIF' in request:
+        d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
         c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
 
     elif b'/CLOSE_B_ACTIF' in request:
+        d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
         c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
 
     elif b'/BP2_ACTIF' in request:
+        d_u.print_and_store_log(f"ACTION: {c_v.nom_bp2} Complete")
         c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
 
     elif request.startswith('GET /EMERGENCY_STOP'):
+        d_u.print_and_store_log("ACTION: Emergency Stop actived!}")
         if oled_d is not None: oled_d.poweron()
-        d_u.print_and_store_log("Emergency Stop actived!")
         with open('/EMERGENCY_STOP', 'w') as file:
             file.write('Emergency stop is active and requires reboot.')
         d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
@@ -163,8 +167,10 @@ def handle_request(cl, sock, request):
         try:
             LIST_F = ["BP1", "BP2"]
             for TODO in LIST_F:
-                with open('/'+TODO, 'w') as file:
-                    file.write('FORCE ALL BUTTON OFF!')    
+                try:
+                    os.remove(TODO)
+                except OSError:
+                    pass
             d_u.print_and_store_log("Force all Buttons OFF")
         except OSError:
             pass
@@ -192,7 +198,7 @@ def handle_request(cl, sock, request):
         d_u.print_and_store_log("UPLOAD_file file in progress")
         response_from_file_m = w_f_m.handle_upload(cl, sock, request)
         cl.sendall(response_from_file_m.encode('utf-8'))
-        utime.sleep(1)
+        utime.sleep(0.5)
 
     elif request.startswith('GET /file_management'):
         d_u.print_and_store_log("Show File management web page")
@@ -225,9 +231,15 @@ def handle_request(cl, sock, request):
         content_type = "text/html"
         status_code = "200 OK"
     
-    elif b'/get_log' in request:
-        response = w_f_m.serve_log_file()
+    elif b'/get_log_action' in request:
+        response = w_l.serve_log_file(4, "ACTION")
         cl.sendall(response.encode('utf-8'))
+        return
+
+    elif b'/get_log_upload' in request:
+        response = w_l.serve_log_file(10, "UPLOAD")
+        cl.sendall(response.encode('utf-8'))
+        return
 
     elif b'/RESET_device' in request:
         d_u.print_and_store_log("Reset button pressed")
@@ -260,7 +272,7 @@ def handle_request(cl, sock, request):
         response_content = w_f_m.serve_file_management_page()
 
     elif b'/revert_mode' in request:
-        d_u.print_and_store_log("Entering Revert mode")
+        d_u.print_and_store_log("ACTION: Entering Revert mode")
         if d_u.file_exists('/BP1'):
             d_u.print_and_store_log("Revert mode creating BP2")
             os.remove("/BP1")
