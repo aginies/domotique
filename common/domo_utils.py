@@ -10,12 +10,41 @@ import machine
 import ntptime
 import uhashlib
 
-def check_and_delete_if_too_big(filepath, max_size_mb):
+def urldecode(s):
+    """
+    Decodes a URL-encoded string.
+    Works by replacing %xx escapes with their single-character equivalent.
+    """
+    decoded_list = []
+    i = 0
+    while i < len(s):
+        if s[i] == '%':
+            if i + 2 < len(s):
+                hex_value = s[i+1:i+3]
+                try:
+                    char_code = int(hex_value, 16)
+                    decoded_list.append(chr(char_code))
+                    i += 3
+                except (ValueError, IndexError):
+                    decoded_list.append(s[i])
+                    i += 1
+            else:
+                decoded_list.append(s[i])
+                i += 1
+        elif s[i] == '+':
+            decoded_list.append(' ')
+            i += 1
+        else:
+            decoded_list.append(s[i])
+            i += 1
+    return "".join(decoded_list)
+
+def check_and_delete_if_too_big(filepath, max_size_kb):
     """
     Checks the size of a file and deletes it if it exceeds
     the specified maximum size.
     """
-    max_size_bytes = max_size_mb * 1024 * 1024
+    max_size_bytes = max_size_kb * 1024
     if not file_exists(filepath):
         print_and_store_log(f"File not found: {filepath}")
         return False
@@ -35,8 +64,23 @@ def check_and_delete_if_too_big(filepath, max_size_mb):
             print_and_store_log(f"Error deleting file {filepath}: {e}")
             return False
     else:
-        print_and_store_log(f"File size is within the limit of {max_size_mb}Mb. No action needed.")
+        print_and_store_log(f"File size ({current_size_bytes} bytes) is within the limit of {max_size_kb}Kb. No action needed.")
         return False
+
+    dir_contents = os.listdir(target_dir)
+
+def delete_files_with_extension(target_dir, extension):
+    """ delete files with extensions """
+    dir_contents = os.listdir(target_dir)
+    for item in dir_contents:
+        if item.endswith("."+extension):
+            try:
+                file_path = target_dir + item
+                print_and_store_log(f"Deleting {file_path}...")
+                os.remove(file_path)
+            except OSError as err:
+                print_and_store_log(f"Error deleting {item}: {e}")
+    print_and_store_log(f"Finished deleting {extension} files.")
 
 def store_log(text_data, filename="/log.txt"):
     """ Stores a text string as a new line in a log file. """
