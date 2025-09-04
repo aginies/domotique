@@ -18,7 +18,7 @@ def handle_upload(cl, socket, request):
         filename_start = request.find(b'filename="', boundary_end) + 10
         filename_end = request.find(b'"', filename_start)
         filename = request[filename_start:filename_end].decode("utf-8")
-        d_u.print_and_store_log(f"Fichier reçu : {filename}")
+        d_u.print_and_store_log(f"UPLOAD: Will Received File: {filename}")
 
         data_start = request.find(b"\r\n\r\n", filename_end) + 4
         body = request[data_start:]
@@ -29,18 +29,18 @@ def handle_upload(cl, socket, request):
         if data_end != -1:
             with open(filename, "wb") as f:
                 f.write(body[:data_end])
-            d_u.print_and_store_log(f"File uploaded successfully. Total bytes: {len(body[:data_end])}")
+            d_u.print_and_store_log(f"UPLOAD: File uploaded successfully. Total bytes: {len(body[:data_end])}")
         else:
             with open(filename, "wb") as f:
                 f.write(body)
                 total_bytes = len(body)
                 remaining = b""
-                d_u.print_and_store_log(f"Initial chunk: {len(body)} bytes. Waiting for more data...")
+                d_u.print_and_store_log(f"UPLOAD: Initial chunk: {len(body)} bytes. Waiting for more data...")
 
                 while True:
                     chunk = cl.recv(8192)
                     if not chunk:
-                        d_u.print_and_store_log(f"Connection closed before boundary found. Total bytes: {total_bytes}")
+                        d_u.print_and_store_log(f"UPLOAD: Connection closed before boundary found. Total bytes: {total_bytes}")
                         return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBoundary non trouvé (connexion fermée)"
 
                     full_chunk = remaining + chunk
@@ -49,28 +49,28 @@ def handle_upload(cl, socket, request):
                     if data_end != -1:
                         f.write(full_chunk[:data_end])
                         total_bytes += len(full_chunk[:data_end])
-                        d_u.print_and_store_log(f"Final chunk: {len(full_chunk[:data_end])} bytes. Total bytes: {total_bytes}")
+                        d_u.print_and_store_log(f"UPLOAD: Final chunk: {len(full_chunk[:data_end])} bytes. Total bytes: {total_bytes}")
                         break
                     else:
                         bytes_to_write = len(full_chunk) - len(closing_boundary)
                         if bytes_to_write > 0:
                             f.write(full_chunk[:bytes_to_write])
                             total_bytes += bytes_to_write
-                        d_u.print_and_store_log(f"Received {len(full_chunk)} bytes. Total so far: {total_bytes}. Waiting for more data...")
+                        d_u.print_and_store_log(f"UPLOAD: Received {len(full_chunk)} bytes. Total so far: {total_bytes}. Waiting for more data...")
                         remaining = full_chunk[-len(closing_boundary):]
 
         end_time = time.time()
         elapsed_time = end_time - start_time
-        d_u.print_and_store_log(f"File uploaded successfully. Total bytes: {total_bytes}")
+        d_u.print_and_store_log(f"UPLOAD: File uploaded successfully. Total bytes: {total_bytes}")
         if elapsed_time > 2:
-            d_u.print_and_store_log(f"Upload time for {filename}: {elapsed_time:.2f} seconds ({total_bytes / 1024 / elapsed_time:.2f} KB/s)")
+            d_u.print_and_store_log(f"UPLOAD: Upload time for {filename}: {elapsed_time:.2f} seconds ({total_bytes / 1024 / elapsed_time:.2f} KB/s)")
 
         if filename == "update.bin":
-            d_u.manage_update("update.bin", "/update")
+            d_u.manage_update("UPLOAD: update.bin", "/update")
         return "HTTP/1.1 303 See Other\r\nLocation: /\r\n\r\n"
 
     except Exception as err:
-        d_u.print_and_store_log(f"Erreur : {err}")
+        d_u.print_and_store_log(f"UPLOAD: Erreur : {err}")
         return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nErreur lors de l'upload"
 
 def serve_file_management_page():
@@ -173,7 +173,7 @@ def serve_file_management_page():
         .disk-bar {{
             height: 20px;
             background: #3498db;
-            width: 40%; /* This will be set dynamically via JavaScript */
+            width: 40%;
             border-radius: 5px;
         }}
         .disk-stats {{
@@ -239,7 +239,7 @@ def serve_file_management_page():
             font-family: 'Courier New', Courier, monospace;
             white-space: pre-wrap;
             word-wrap: break-word;
-            height: 300px; /* Adjust height as needed */
+            height: 300px;
             overflow-y: scroll;
         }}
         .warning-text {{
@@ -318,7 +318,7 @@ def serve_file_management_page():
         const usedPercentage = {used_percentage};
         document.getElementById('diskBar').style.width = usedPercentage + '%';
         function fetchLog() {{
-            fetch('/get_log')
+            fetch('/get_log_upload')
                 .then(response => {{
                     if (response.ok) {{
                         return response.text();
@@ -348,11 +348,9 @@ def serve_file_management_page():
 
         fetchLog();
         setInterval(fetchLog, 300);
-
         const uploadForm = document.getElementById('uploadForm');
         const uploadStatusDiv = document.getElementById('uploadStatus');
         uploadForm.addEventListener('submit', function(event) {{
-            // Check if a file is selected
             if (!uploadForm.elements['file'].files.length) {{
                 return; // Let the browser handle the "required" validation
             }}
@@ -370,17 +368,6 @@ def serve_file_management_page():
 </html>
 """
     return html
-
-def serve_log_file():
-    try:
-        with open("log.txt", "r") as f:
-            log_lines = f.readlines()
-            # Get the last 10 lines, or fewer if the file has less than 10 lines
-            last_10_lines = log_lines[-10:]
-            log_content = "".join(last_10_lines)
-            return "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n" + log_content
-    except OSError:
-        return "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nLog file not found"
 
 def create_view_file_page(file_path):
     """Generate an HTML page to display the content of a file with Python syntax highlighting."""
@@ -443,10 +430,8 @@ def create_view_file_page(file_path):
         <a href="/file_management">← Back to File Management</a>
         <pre><code class="language-python">{escaped_content}</code></pre>
     </div>
-    <!-- Load Highlight.js from local -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>    <!-- Initialize Highlight.js -->
     <script>
-        // Wait for DOM to be fully loaded
         document.addEventListener('DOMContentLoaded', (event) => {{
             if (typeof hljs !== 'undefined') {{
                 hljs.highlightAll();
