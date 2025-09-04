@@ -1,6 +1,7 @@
 # antoine@ginies.org
 # GPL3
 
+from collections import deque
 import config_var as c_v
 
 def create_log_page():
@@ -77,3 +78,15 @@ def create_log_page():
 </body>
 </html>"""
     return html
+
+def serve_log_file(nb_lines, pattern_c):
+    try:
+        with open("/log.txt", "r", encoding="utf-8") as f:
+            log_lines = f.readlines()
+            action_lines = [line for line in log_lines if pattern_c in line]
+            last_x_lines = action_lines[-nb_lines:]
+            log_content = "".join(last_x_lines)
+            return log_content
+            #return "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n" + log_content
+    except OSError:
+        return "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nLog file not found"
