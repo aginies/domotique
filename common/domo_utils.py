@@ -9,6 +9,8 @@ import micropython
 import machine
 import ntptime
 import uhashlib
+import urequests
+import utime
 
 def urldecode(s):
     """
@@ -404,3 +406,59 @@ def print_info():
     print("Total Space (MB): {:.2f}".format(disk_info["total_mb"]))
     print("Free Space (MB): {:.2f}".format(disk_info["free_mb"]))
     print("Used Space (MB): {:.2f}".format(disk_info["used_mb"]))
+
+def import_missing_module(url):
+    """ Import missing lib with mip, need json """
+    import mip
+    print_and_store_log(f"Importing lib from {url}")
+    try:
+        mip.install(url)
+    except Exception as err:
+        print_and_store_log(f"An error occurred: {err}")
+
+def download_large_file_with_progress(url, save_path, chunk_size=512):
+    """
+    Downloads a large file in chunks to save memory and displays progress.
+    """
+    try:
+        response = urequests.get(url, stream=True)
+        if response.status_code != 200:
+            print_and_store_log(f"Error: Received bad status code: {response.status_code}")
+            return
+
+        is_chunked = response.headers.get('transfer-encoding', '').lower() == 'chunked'
+        if not is_chunked:
+            # This function is specifically for servers that are known to send chunked responses.
+            print_and_store_log("Warning: Server is not sending a chunked response, but proceeding with chunked parsing logic.")
+
+        downloaded_size = 0
+        print_and_store_log(f"Starting download to {save_path}...")
+        start_time = utime.ticks_ms()
+        with open(save_path, 'wb') as fdo:
+            while True:
+                size_line = response.raw.readline()
+                if not size_line or size_line == b'\r\n':
+                    continue
+                try:
+                    chunk_len = int(size_line.strip(), 16)
+                except ValueError:
+                    print_and_store_log("Error parsing chunk size, download may be incomplete.")
+                    break
+                if chunk_len == 0:
+                    break
+                chunk = response.raw.read(chunk_len)
+                fdo.write(chunk)
+                downloaded_size += len(chunk)
+                response.raw.read(2)
+                print(f"Downloaded {downloaded_size} bytes", end='\r')
+
+        final_elapsed_s = utime.ticks_diff(utime.ticks_ms(), start_time) / 1000
+        avg_speed_kbs = (downloaded_size / 1024) / final_elapsed_s if final_elapsed_s > 0 else 0
+        print_and_store_log(f"Download of {url} to {save_path} complete.")
+        print_and_store_log(f"Average speed: {avg_speed_kbs:.2f} KB/s")
+
+    except Exception as err:
+        print_and_store_log(f"\nAn error occurred: {err}")
+    finally:
+        if 'response' in locals() and response:
+            response.close()
