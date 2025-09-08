@@ -2,7 +2,7 @@ NAME := pool_domotic
 VERSION := 0.9.3
 
 COMMON_SOURCE_DIR := ../common
-FILES_TO_COPY := domo_wifi.py save_config.py domo_utils.py oled_ssd1306.py esp32_led.py web_files_management.py crtl_relay.py web_log.py ssd1306.py microdot.py microdot_helpers.py microdot_websocket.py
+FILES_TO_COPY := domo_wifi.py save_config.py domo_microdot.py domo_utils.py oled_ssd1306.py esp32_led.py web_files_management.py crtl_relay.py web_log.py web_upload.py ssd1306.py microdot.py microdot_helpers.py microdot_websocket.py
 FILES_TO_UPLOAD := config_var.py main.py web_command.py web_config.py
 
 PORT ?= /dev/ttyACM0
