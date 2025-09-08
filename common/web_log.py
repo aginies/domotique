@@ -76,9 +76,9 @@ def create_log_page():
 </html>"""
     return html
 
-jours = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+jours = ("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche")
 # Month tuple (index 0 = January)
-mois = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")
+mois = ("jan", "fév", "mars", "avr", "mai", "juin", "jui", "août", "sept", "oct", "nov", "déc")
 
 def format_log_line(line, pattern_c):
     """
@@ -99,7 +99,7 @@ def format_log_line(line, pattern_c):
         weekday_index = utime.localtime(timestamp)[6] # 0=Monday
         jour_nom = jours[weekday_index]
         mois_nom = mois[month - 1]
-        formatted_date = f"{jour_nom} {day} {mois_nom} {year}"
+        formatted_date = f"{jour_nom} {day} {mois_nom}" # {year}"
         hour, minute, second = [int(p) for p in clean_time.split(':')]
         # We only need the date to find the day of the week
         formatted_time = f"{hour:02d}:{minute:02d}:{second:02d}"        
