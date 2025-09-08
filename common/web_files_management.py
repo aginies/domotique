@@ -5,74 +5,6 @@ import os
 import time
 import domo_utils as d_u
 
-def handle_upload(cl, socket, request):
-    try:
-        # Extract boundary
-        boundary_start = request.find(b"boundary=")
-        if boundary_start == -1:
-            return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBoundary non trouvé"
-        boundary_end = request.find(b"\r\n", boundary_start)
-        boundary = request[boundary_start + 9:boundary_end]
-        closing_boundary = b"\r\n--" + boundary + b"--"
-
-        filename_start = request.find(b'filename="', boundary_end) + 10
-        filename_end = request.find(b'"', filename_start)
-        filename = request[filename_start:filename_end].decode("utf-8")
-        d_u.print_and_store_log(f"UPLOAD: Will Received File: {filename}")
-
-        data_start = request.find(b"\r\n\r\n", filename_end) + 4
-        body = request[data_start:]
-
-        start_time = time.time()
-        total_bytes = 0
-        data_end = body.find(closing_boundary)
-        if data_end != -1:
-            with open(filename, "wb") as f:
-                f.write(body[:data_end])
-            d_u.print_and_store_log(f"UPLOAD: File uploaded successfully. Total bytes: {len(body[:data_end])}")
-        else:
-            with open(filename, "wb") as f:
-                f.write(body)
-                total_bytes = len(body)
-                remaining = b""
-                d_u.print_and_store_log(f"UPLOAD: Initial chunk: {len(body)} bytes. Waiting for more data...")
-
-                while True:
-                    chunk = cl.recv(8192)
-                    if not chunk:
-                        d_u.print_and_store_log(f"UPLOAD: Connection closed before boundary found. Total bytes: {total_bytes}")
-                        return "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nBoundary non trouvé (connexion fermée)"
-
-                    full_chunk = remaining + chunk
-                    data_end = full_chunk.find(closing_boundary)
-
-                    if data_end != -1:
-                        f.write(full_chunk[:data_end])
-                        total_bytes += len(full_chunk[:data_end])
-                        d_u.print_and_store_log(f"UPLOAD: Final chunk: {len(full_chunk[:data_end])} bytes. Total bytes: {total_bytes}")
-                        break
-                    else:
-                        bytes_to_write = len(full_chunk) - len(closing_boundary)
-                        if bytes_to_write > 0:
-                            f.write(full_chunk[:bytes_to_write])
-                            total_bytes += bytes_to_write
-                        d_u.print_and_store_log(f"UPLOAD: Received {len(full_chunk)} bytes. Total so far: {total_bytes}. Waiting for more data...")
-                        remaining = full_chunk[-len(closing_boundary):]
-
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        d_u.print_and_store_log(f"UPLOAD: File uploaded successfully. Total bytes: {total_bytes}")
-        if elapsed_time > 2:
-            d_u.print_and_store_log(f"UPLOAD: Upload time for {filename}: {elapsed_time:.2f} seconds ({total_bytes / 1024 / elapsed_time:.2f} KB/s)")
-
-        if filename == "update.bin":
-            d_u.manage_update("UPLOAD: update.bin", "/update")
-        return "HTTP/1.1 303 See Other\r\nLocation: /\r\n\r\n"
-
-    except Exception as err:
-        d_u.print_and_store_log(f"UPLOAD: Erreur : {err}")
-        return "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nErreur lors de l'upload"
-
 def serve_file_management_page():
     """Get a list of all files in the root directory and generate the HTML page."""
     free_mb, total_mb, used_mb = d_u.get_disk_space_info()
@@ -299,70 +231,37 @@ def serve_file_management_page():
             </tbody>
         </table>
         </div>
-    <div class="container">
-        <h1>Upload a file</h1>
-        <div class="upload-form">
-        <form id="uploadForm" action="/UPLOAD_file" method="POST" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".py,.txt,.bin">
-            <button class="upload-button" type="submit">Upload</button>
-        </form>
-        <div id="uploadStatus" class="upload-status" style="display: none;">
-        Uploading... Please wait.
-        </div>
     </div>
     <div class="container">
-        <h2>Log.txt</h2>
-        <pre id="log-display"></pre>
+        <div>
+            <a href="/UPLOAD_server" target="_blank" class="upload-button">Upload</a>
+        </div>
     </div>
     <script>
         const usedPercentage = {used_percentage};
         document.getElementById('diskBar').style.width = usedPercentage + '%';
-        function fetchLog() {{
-            fetch('/get_log_upload')
-                .then(response => {{
-                    if (response.ok) {{
-                        return response.text();
-                    }}
-                    throw new Error('Failed to fetch log file.');
-                }})
-                .then(logText => {{
-                    const logDisplay = document.getElementById('log-display');
-                    const lines = logText.split('\\n');
-                    let styledHtml = '';
-
-                    lines.forEach(line => {{
-                        if (line.includes('WARNING')) {{
-                            styledHtml += `<span class="warning-text">${{line}}</span>\\n`;
-                        }} else if (line.includes('UPDATE')) {{
-                            styledHtml += `<span class="upload-text">${{line}}</span>\n`;
-                        }} else {{
-                            styledHtml += `${{line}}\\n`;
-                        }}
-                    }});
-
-                    logDisplay.innerHTML = styledHtml;
-                    logDisplay.scrollTop = logDisplay.scrollHeight;
-                }})
-                .catch(error => console.error('Error:', error));
+        const CHUNK_SIZE = 16384; // 16KB chunks
+        let socket;
+        let fileId;
+        function connectWebSocket() {{
+            socket = new WebSocket("ws://" + window.location.host + "/ws");
+            socket.onopen = () => {{
+                console.log("WebSocket connected");
+            }};
+            socket.onmessage = (event) => {{
+                const message = JSON.parse(event.data);
+                console.log("Server:", message.message);
+                if (message.type === "complete") {{
+                    alert("File uploaded successfully!");
+                }}
+            }};
+            socket.onclose = ()            => {{
+                console.log("WebSocket disconnected");
+            }};
+            socket.onerror = (error) => {{
+                console.error("WebSocket error:", error);
+            }};
         }}
-
-        fetchLog();
-        setInterval(fetchLog, 300);
-        const uploadForm = document.getElementById('uploadForm');
-        const uploadStatusDiv = document.getElementById('uploadStatus');
-        uploadForm.addEventListener('submit', function(event) {{
-            if (!uploadForm.elements['file'].files.length) {{
-                return; // Let the browser handle the "required" validation
-            }}
-            uploadStatusDiv.style.display = 'block';
-            setTimeout(() => {{
-                uploadForm.submit();
-            }}, 100);
-            event.preventDefault();
-        }});
-        window.addEventListener('load', function() {{
-            uploadStatusDiv.style.display = 'none';
-        }});
     </script>
 </body>
 </html>

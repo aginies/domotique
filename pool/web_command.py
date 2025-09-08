@@ -98,7 +98,7 @@ def create_html_response():
             border-radius: 5px;
             font-size: 12px;
             transition: background-color 0.3s;
-            background-color: #17A2B8; /* Example color to differentiate */
+            background-color: #17A2B8;
         }}
         .button:hover {{
             background-color: #0056b3;
@@ -169,7 +169,7 @@ def create_html_response():
             border: 1px solid #ddd;
             margin-left: auto;
             margin-right: auto;
-            display: block; /* Explicitly ensure it's always block-level */
+            display: block;
         }}
         .progress-bar {{
             width: 0%;
@@ -245,7 +245,7 @@ def create_html_response():
     </div>
     <div class="footer">
         <div class="footer-buttons">
-            <button id="SAVE_config" class="config-button">Configurer</button>
+            <a href="/web_config" target="_blank" class="config-button">Configurer</a>
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
             <a href="/file_management" target="_blank" class="config-button">Explorer</a>
             <a href="mailto:antoine@ginies.org" class="config-button">Antoine</a>
@@ -253,180 +253,176 @@ def create_html_response():
     </div>
     </div>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {{
-        const TIME_TO_OPEN_MS = {c_v.time_to_open} * 1000; // Convert to milliseconds
-        const TIME_TO_CLOSE_MS = {c_v.time_to_close} * 1000; // Convert to milliseconds
-        let currentProgressBarInterval = null; // To manage active animation
-        const progressBarContainer = document.getElementById('progressBarContainer');
-        const progressBar = document.getElementById('progressBar');
-        const rebootMessageDiv = document.getElementById('rebootMessage');
-        const emergencyButton = document.getElementById('emergencyStop');
-        const bp1Button = document.getElementById('BP1');
-        const bp2Button = document.getElementById('BP2');
-        const open_bButton = document.getElementById('OPEN_B');
-        const close_bButton = document.getElementById('CLOSE_B');
-        let emergencyActiveClient = false;
-        progressBar.style.width = '0%';
-        progressBar.textContent = '0%';
-        //rebootMessageDiv.style.display = 'none';
+document.addEventListener('DOMContentLoaded', function() {{
+    const TIME_TO_OPEN_MS = {c_v.time_to_open} * 1000; // Converti en millisecondes
+    const TIME_TO_CLOSE_MS = {c_v.time_to_close} * 1000; // Converti en millisecondes
+    const PIN_CODE = "{PIN_CODE}"; // Code PIN pour la fermeture
 
-        // --- Progress Bar Animation Function ---
-        function animateProgressBar(durationMs, startPercent, endPercent) {{
-            getLogs();
-            if (currentProgressBarInterval) {{
-                clearInterval(currentProgressBarInterval);
-            }}
-            const startTime = Date.now();
-            let lastRenderedPercent = startPercent;
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const progressBar = document.getElementById('progressBar');
+    const rebootMessageDiv = document.getElementById('rebootMessage');
+    const emergencyButton = document.getElementById('emergencyStop');
+    const bp1Button = document.getElementById('BP1');
+    const bp2Button = document.getElementById('BP2');
+    const open_bButton = document.getElementById('OPEN_B');
+    const close_bButton = document.getElementById('CLOSE_B');
+    const logContainer = document.getElementById('log-display');
+    const timestampElement = document.getElementById('timestamp');
 
-            // Function to update the bar
-            const updateBar = () => {{
-                const elapsedTime = Date.now() - startTime;
-                let progressFraction = Math.min(elapsedTime / durationMs, 1); // Clamp between 0 and 1
-                let currentPercent;
-                if (startPercent < endPercent) {{ // Increasing (e.g., 0 to 100)
-                    currentPercent = startPercent + (endPercent - startPercent) * progressFraction;
-                }} else {{ // Decreasing (e.g., 100 to 0)
-                    currentPercent = startPercent - (startPercent - endPercent) * progressFraction;
-                }}
-                if (Math.abs(currentPercent - lastRenderedPercent) >= 0.5 || progressFraction === 1) {{
-                    progressBar.style.width = currentPercent.toFixed(0) + '%';
-                    progressBar.textContent = currentPercent.toFixed(0) + '%';
-                    lastRenderedPercent = currentPercent;
-                }}
-                if (progressFraction >= 1) {{
-                    clearInterval(currentProgressBarInterval);
-                    currentProgressBarInterval = null; // Reset the interval variable
-                    // Ensure final state is exact
-                    progressBar.style.width = endPercent.toFixed(0) + '%';
-                    progressBar.textContent = endPercent.toFixed(0) + '%';
-                }}
-            }};
-            // If duration is 0, just jump to end state instantly
-            if (durationMs === 0) {{
-                updateBar(); // Call once to set the final state
-                return;
-            }}
-            currentProgressBarInterval = setInterval(updateBar, 100);
+    let currentProgressBarInterval = null; // Pour gérer l'animation en cours
+    let emergencyActiveClient = false; // État d'urgence côté client
+    progressBar.style.width = '100%';
+    progressBar.textContent = '100%';
+    function animateProgressBar(durationMs, startPercent, endPercent) {{
+        if (currentProgressBarInterval) {{
+            clearInterval(currentProgressBarInterval);
         }}
-        const logContainer = document.getElementById('log-display');
-        const getLogs = async () => {{
-            if (currentProgressBarInterval !== null) {{
-                return;
-            }}
-            try {{
-                const response = await fetch('/get_log_action');
-                if (!response.ok) {{
-                    console.error(`HTTP error! Status: ${{response.status}}`);
-                    return;
-                }}
-                const logData = await response.text();
 
-                if (logContainer.textContent !== logData) {{
-                    logContainer.textContent = logData.trim() ? logData : 'Log is empty.';
-                }}
-            }} catch (error) {{
-                console.error('Failed to fetch logs:', error);
+        const startTime = Date.now();
+        let lastRenderedPercent = startPercent;
+
+        const updateBar = () => {{
+            const elapsedTime = Date.now() - startTime;
+            const progressFraction = Math.min(elapsedTime / durationMs, 1); // Limite à 1 (100%)
+
+            let currentPercent;
+            if (startPercent < endPercent) {{
+                currentPercent = startPercent + (endPercent - startPercent) * progressFraction;
+            }} else {{
+                currentPercent = startPercent - (startPercent - endPercent) * progressFraction;
+            }}
+
+            if (Math.abs(currentPercent - lastRenderedPercent) >= 0.5 || progressFraction === 1) {{
+                progressBar.style.width = `${{currentPercent.toFixed(0)}}%`;
+                progressBar.textContent = `${{currentPercent.toFixed(0)}}%`;
+                lastRenderedPercent = currentPercent;
+            }}
+
+            if (progressFraction >= 1) {{
+                clearInterval(currentProgressBarInterval);
+                currentProgressBarInterval = null;
+                // Force l'état final pour éviter les arrondis
+                progressBar.style.width = `${{endPercent.toFixed(0)}}%`;
+                progressBar.textContent = `${{endPercent.toFixed(0)}}%`;
             }}
         }};
-        // --- Status Update Function (for buttons) ---
-        function updateStatus() {{
-            getLogs()
-            fetch('/status')
-            .then(response => response.json())
-            .then(data => {{
-                console.log("Status update:", data);
-                emergencyActiveClient = data.Emergency_stop;
-                if (data.Emergency_stop) {{
-                    rebootMessageDiv.style.display = 'block';
-                    // Disable all control buttons if emergency is active
-                    bp1Button.disabled = true;
-                    bp1Button.style.backgroundColor = 'grey';
-                    bp2Button.disabled = true;
-                    bp2Button.style.backgroundColor = 'grey';
-                    emergencyButton.disabled = true;
-                    open_bButton.disabled = true;
-                    open_bButton.style.backgroundColor = 'grey';
-                    close_bButton.disabled = true;
-                    close_bButton.style.backgroundColor = 'grey';
-                    emergencyButton.style.backgroundColor = 'grey';
-                    if (currentProgressBarInterval) {{
-                        clearInterval(currentProgressBarInterval);
-                        currentProgressBarInterval = null;
-                    }}
-                }} else {{
-                    rebootMessageDiv.style.display = 'none';
-                    emergencyButton.disabled = false;
-                    emergencyButton.style.backgroundColor = '#DC3545';
-                    // Re-enable/disable BP1/BP2 based on their individual active states
-                    if (!data.In_progress) {{
-                        console.log("Nothing ongoing")
-                        if (data.BP1_active) {{
-                            console.log("Volet ouvert")
-                            progressBar.style.width = '100%';
-                            progressBar.textContent = '100%';
-                        }} else if (data.BP2_active) {{
-                            console.log("Volet Fermé")
-                            progressBar.style.width = '100%';
-                            progressBar.textContent = '100%';
-                        }} else {{
-                            console.log("Strange...")
-                        }}
-                    }} else if (data.BP1_active) {{
-                        console.log("BP1_active")
+
+        if (durationMs === 0) {{
+            updateBar();
+            return;
+        }}
+
+        currentProgressBarInterval = setInterval(updateBar, 50); // Rafraîchit toutes les 50ms
+    }}
+
+    const getLogs = async () => {{
+        try {{
+            const response = await fetch('/get_log_action');
+            if (!response.ok) {{
+                throw new Error(`HTTP error! Status: ${{response.status}}`);
+            }}
+            const logData = await response.text();
+            console.log("Log data:", logData); // Debug log
+            document.getElementById('log-display').textContent = logData || 'No logs found.';
+        }} catch (error) {{
+            console.error('Failed to fetch logs:', error);
+            document.getElementById('log-display').textContent = 'Failed to load logs.';
+        }}
+    }};
+
+    const updateStatus = async () => {{
+        try {{
+            const response = await fetch('/status');
+            if (!response.ok) {{
+                throw new Error(`HTTP error! Status: ${{response.status}}`);
+            }}
+            const data = await response.json();
+            console.log("Status update:", data);
+
+            emergencyActiveClient = data.Emergency_stop;
+
+            if (data.Emergency_stop) {{
+                rebootMessageDiv.style.display = 'block';
+                disableAllButtons(true);
+            }} else {{
+                rebootMessageDiv.style.display = 'none';
+                emergencyButton.disabled = false;
+                emergencyButton.style.backgroundColor = '#DC3545';
+
+                if (!data.In_progress) {{
+                    if (data.BP1_active) {{
                         bp1Button.disabled = true;
                         bp1Button.style.backgroundColor = 'grey';
                         bp2Button.disabled = false;
                         bp2Button.style.backgroundColor = '#007BFF';
+                        open_bButton.disabled = false;
+                        open_bButton.style.backgroundColor = '#007BFF';
+                        close_bButton.disabled = false;
+                        close_bButton.style.backgroundColor = '#007BFF';
                     }} else if (data.BP2_active) {{
-                        console.log("BP2_active")
                         bp2Button.disabled = true;
                         bp2Button.style.backgroundColor = 'grey';
                         bp1Button.disabled = false;
                         bp1Button.style.backgroundColor = '#007BFF';
+                        open_bButton.disabled = false;
+                        open_bButton.style.backgroundColor = '#007BFF';
+                        close_bButton.disabled = false;
+                        close_bButton.style.backgroundColor = '#007BFF';
                     }} else {{
-                        console.log("Check I am lost in space")
                         bp1Button.disabled = false;
                         bp1Button.style.backgroundColor = '#007BFF';
                         bp2Button.disabled = false;
                         bp2Button.style.backgroundColor = '#007BFF';
+                        open_bButton.disabled = false;
+                        open_bButton.style.backgroundColor = '#007BFF';
+                        close_bButton.disabled = false;
+                        close_bButton.style.backgroundColor = '#007BFF';
                     }}
+                }} else if (data.BP1_active) {{
+                    disableAllButtons(true, ['BP2', 'CLOSE_B', 'OPEN_B']);
+                }} else if (data.BP2_active) {{
+                    disableAllButtons(true, ['BP1'], 'CLOSE_B', 'OPEN_B');
                 }}
-            }})
-            .catch(error => console.error('Error fetching status:', error));
+            }}
+        }} catch (error) {{
+            console.error('Error fetching status:', error);
         }}
-        // --- Handle Button Click Function ---
-        function handleButtonClick(buttonId, endpoint) {{
-            console.log("Button clicked:", buttonId);
-            const button = document.getElementById(buttonId);
+    }};
 
-            if (button && !button.disabled) {{
-                button.classList.add('clicked');
-                setTimeout(() => {{
-                    button.classList.remove('clicked');
-                }}, 300);
+    function disableAllButtons(disable, exceptions = []) {{
+        const buttons = [bp1Button, bp2Button, open_bButton, close_bButton];
+        buttons.forEach(button => {{
+            if (!exceptions.includes(button.id)) {{
+                button.disabled = disable;
+                button.style.backgroundColor = disable ? 'grey' : '#007BFF';
             }}
-            if (buttonId === 'BP1') {{
-                animateProgressBar(TIME_TO_OPEN_MS, 100, 0);
-                bp1Button.disabled = true;
-                bp1Button.style.backgroundColor = 'grey';
-                bp2Button.disabled = true;
-                bp2Button.style.backgroundColor = 'grey';
-            }} else if (buttonId === 'BP2') {{
-                const pin = prompt("Pour fermer entrer le code PIN:");
-                if (pin !== "{PIN_CODE}") {{
-                    alert("Code PIN incorrect. Le volet ne se fermera pas.");
-                    return;
-                }}
-                animateProgressBar(TIME_TO_CLOSE_MS, 100, 0);
-                bp1Button.disabled = true;
-                bp1Button.style.backgroundColor = 'grey';
-                bp2Button.disabled = true;
-                bp2Button.style.backgroundColor = 'grey';
+        }});
+    }}
+
+    function handleButtonClick(buttonId, endpoint, requiresPin = false) {{
+        const button = document.getElementById(buttonId);
+        if (!button || button.disabled) return;
+
+        button.classList.add('clicked');
+        setTimeout(() => button.classList.remove('clicked'), 300);
+
+        if (buttonId === 'BP2' && requiresPin) {{
+            const pin = prompt("Pour fermer, entrer le code PIN:");
+            if (pin !== PIN_CODE) {{
+                alert("Code PIN incorrect. Le volet ne se fermera pas.");
+                return;
             }}
-            fetch(endpoint, {{
-                method: 'POST'
-            }})
+        }}
+
+        if (buttonId === 'BP1') {{
+            animateProgressBar(TIME_TO_OPEN_MS, 0, 100);
+            disableAllButtons(true);
+        }} else if (buttonId === 'BP2') {{
+            animateProgressBar(TIME_TO_CLOSE_MS, 100, 0);
+            disableAllButtons(true);
+        }}
+
+        fetch(endpoint, {{ method: 'POST' }})
             .then(response => {{
                 if (!response.ok) {{
                     throw new Error('Network response was not ok');
@@ -434,85 +430,57 @@ def create_html_response():
                 return response.text();
             }})
             .then(data => {{
-                console.log(data);
-                const timestampElement = document.getElementById('timestamp');
+                console.log("Server response:", data);
                 if (timestampElement) {{
-                    const now = new Date();
-                    const timestamp = now.toLocaleString();
-                    timestampElement.textContent = timestamp;
+                    timestampElement.textContent = new Date().toLocaleString();
                 }}
+                getLogs();
                 updateStatus();
             }})
             .catch(error => {{
-                console.error('There has been a problem with your fetch operation:', error);
-                if (button) {{
-                    button.classList.remove('clicked');
-                }}
+                console.error('Fetch error:', error);
                 updateStatus();
             }});
-        }}
-        // --- Handle Emergency Stop Function ---
-        function handleEmergencyStop() {{
-            console.log("Emergency Stop button clicked!");
-            emergencyActiveClient = true;
-            rebootMessageDiv.style.display = 'block';
-            bp1Button.disabled = true;
-            bp1Button.style.backgroundColor = 'grey';
-            bp2Button.disabled = true;
-            bp2Button.style.backgroundColor = 'grey';
-            open_bButton.disabled = true;
-            open_bButton.style.backgroundColor = 'grey';
-            close_bButton.disabled = true;
-            close_bButton.style.backgroundColor = 'grey';
-            emergencyButton.style.backgroundColor = 'grey';
-            emergencyButton.disabled = true;
-            emergencyButton.style.backgroundColor = 'grey';
-            if (currentProgressBarInterval) {{
-                clearInterval(currentProgressBarInterval);
-                currentProgressBarInterval = null;
-            }}
+    }}
 
-            fetch('/EMERGENCY_STOP', {{
-                method: 'POST'
-            }})
+    function handleEmergencyStop() {{
+        console.log("Emergency Stop triggered!");
+        disableAllButtons(true);
+        emergencyButton.disabled = true;
+        emergencyButton.style.backgroundColor = 'grey';
+
+        if (currentProgressBarInterval) {{
+            clearInterval(currentProgressBarInterval);
+            currentProgressBarInterval = null;
+        }}
+
+        fetch('/EMERGENCY_STOP', {{ method: 'POST' }})
             .then(response => {{
                 if (!response.ok) {{
-                    throw new Error('Network response for emergency stop was not ok');
+                    throw new Error('Failed to send emergency stop');
                 }}
                 return response.text();
             }})
             .then(data => {{
                 console.log("Emergency Stop response:", data);
-                updateStatus(); 
+                getLogs();
+                updateStatus();
             }})
             .catch(error => {{
-                console.error('Error sending emergency stop command:', error);
-                emergencyActiveClient = false;
+                console.error('Error:', error);
                 updateStatus();
             }});
-        }}
-        // --- Event Listeners ---
-        document.getElementById('BP1').addEventListener('click', function() {{
-            handleButtonClick('BP1', '/BP1_ACTIF');
-        }});
-        document.getElementById('OPEN_B').addEventListener('click', function() {{
-            handleButtonClick('OPEN_B', '/OPEN_B_ACTIF');
-        }});
-         document.getElementById('CLOSE_B').addEventListener('click', function() {{
-            handleButtonClick('CLOSE_B', '/CLOSE_B_ACTIF');
-        }});
-        document.getElementById('BP2').addEventListener('click', function() {{
-            handleButtonClick('BP2', '/BP2_ACTIF');
-        }});
-        document.getElementById('SAVE_config').addEventListener('click', function(event) {{
-            console.log("Config button clicked!");
-            handleButtonClick('SAVE_config', '/SAVE_config');
-            window.location.href = '/SAVE_config';
-        }});
-        document.getElementById('emergencyStop').addEventListener('click', handleEmergencyStop);
-        updateStatus();
-        setInterval(updateStatus, 1000);
-    }});
+    }}
+
+    bp1Button.addEventListener('click', () => handleButtonClick('BP1', '/BP1_ACTIF'));
+    open_bButton.addEventListener('click', () => handleButtonClick('OPEN_B', '/OPEN_B_ACTIF'));
+    close_bButton.addEventListener('click', () => handleButtonClick('CLOSE_B', '/CLOSE_B_ACTIF'));
+    bp2Button.addEventListener('click', () => handleButtonClick('BP2', '/BP2_ACTIF', true));
+    emergencyButton.addEventListener('click', handleEmergencyStop);
+    updateStatus();
+    getLogs()
+    setInterval(updateStatus, 1000); // Met à jour le statut toutes les secondes
+}});
     </script>
 </body>
 </html>"""

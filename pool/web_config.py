@@ -26,7 +26,6 @@ config = {
     "AP_IP": config_var.AP_IP,
     "I_LED_PIN": config_var.I_LED_PIN,
     "LED_PIN": config_var.LED_PIN,
-    "DOOR_SENSOR_PIN": config_var.DOOR_SENSOR_PIN,
     "RELAY1_PIN": config_var.RELAY1_PIN,
     "RELAY2_PIN": config_var.RELAY2_PIN,
     "time_ok": config_var.time_ok,
@@ -38,7 +37,7 @@ config = {
     "VERSION": version,
 }
 
-def serve_config_page():
+def serve_config_page(IP_ADDR, WS_PORT):
     selected_options = {
         'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
         'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
@@ -49,6 +48,8 @@ def serve_config_page():
     wifi_config = {
         'external_wifi_yes': 'True' if config_var.E_WIFI is True else '',
         'external_wifi_no': 'False' if config_var.E_WIFI is False else '',
+        'IP_ADDR': IP_ADDR,
+        'WS_PORT': WS_PORT,
     }
 
     html = """
@@ -174,7 +175,7 @@ def serve_config_page():
 <body>
     <div class="form-container">
         <h1>Configuration pour la {DOOR} ({VERSION})</h1>
-        <form id="configForm" action="/SAVE_config" method="POST">
+        <form id="configForm" action="/save_config" method="POST">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
@@ -271,10 +272,6 @@ def serve_config_page():
                     <input type="number" id="LED_PIN" name="LED_PIN" value="{LED_PIN}">
                 </div>
                 <div class="form-group">
-                    <label for="DOOR_SENSOR_PIN">Door Sensor Pin:</label>
-                    <input type="number" id="DOOR_SENSOR_PIN" name="DOOR_SENSOR_PIN" value="{DOOR_SENSOR_PIN}">
-                </div>
-                <div class="form-group">
                     <label for="RELAY1_PIN">Relay 1 Pin:</label>
                     <input type="number" id="RELAY1_PIN" name="RELAY1_PIN" value="{RELAY1_PIN}">
                 </div>
@@ -300,40 +297,22 @@ def serve_config_page():
                 </div>
             </div>
         <div class="button-group">
-        <input type="submit" value="Save Configuration">
+            <form id="configForm" action="/save_config" method="POST" enctype="multipart/form-data">
+                <input type="submit" value="Save">
+            </form>
         <a href="/" class="cancel-button">Cancel</a>
         <a href="/RESET_device" target="_blank" class="button reset-button" onclick="return confirm('Are you sure you want to reset the device? This will cause a reboot.')">Reset Device</a>
         </div>
     </form> 
     </div>
-    <script>
-  document.addEventListener("DOMContentLoaded", function () {{
-    const configForm = document.getElementById("configForm");
-
-    // Add an event listener for the form submission
-    configForm.addEventListener("submit", function (event) {{
-      // Check if a 'confirmation' has already been shown.
-      if (!this.dataset.isConfirmed) {{
-        // Prevent the form from submitting immediately
-        event.preventDefault();
-
-        // Show the confirmation dialog
-        const confirmation = confirm(
-          "Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif."
-        );
-
-        if (confirmation) {{
-          // If the user confirms, set a flag and resubmit the form
-          this.dataset.isConfirmed = "true";
-          this.submit();
-        }} else {{
-          // If the user cancels, do nothing, and the form remains
-          console.log("Configuration save cancelled.");
-        }}
-      }}
-    }});
-  }});
-    </script>
 </body>
+<script>
+    const configForm = document.getElementById('configForm');
+    const configServerUrl = 'http://{IP_ADDR}:{WS_PORT}';
+    configForm.addEventListener('change', () => {{
+        configForm.action = configServerUrl + '/save_config/';
+        console.log('Form action set to:', configForm.action);
+    }};
+</script>
 </html>""".format(**config, **selected_options, **wifi_config)
     return html

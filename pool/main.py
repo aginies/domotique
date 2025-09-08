@@ -4,9 +4,14 @@ import socket
 import utime
 import os
 import ujson
+import asyncio
 from machine import Pin, reset
 import esp32 # get MCU temp
 import ure as re
+import _thread
+import time
+import socket
+import gc
 
 # Internal lib
 import web_command as w_cmd
@@ -20,6 +25,10 @@ import save_config as s_c
 import web_files_management as w_f_m
 import web_log as w_l
 import crtl_relay as c_r
+import domo_microdot as d_m
+import web_upload as w_u
+from domo_microdot import ws_app
+from microdot import Microdot, send_file, Response
 
 # LIST OF CONNECTED CLIENTS
 connected_ips = set()
@@ -35,6 +44,9 @@ prev_door_state = door_state
 # SEtting OFF RELAY for BP1 and BP2
 c_r.relay1.off()
 c_r.relay2.off()
+
+global cl
+global sock_2
 
 # At start we can only Open the Pool
 # remove all previous ERROR
@@ -94,222 +106,6 @@ def oled_constant_show():
             oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
 
-def handle_client_connection(sock):
-    """ At client connection send html stuff """
-    try:
-        cl, addr = sock.accept()
-        client_ip = addr[0]
-        if client_ip not in connected_ips:
-            d_u.print_and_store_log(f"Client connected from {addr}")
-            connected_ips.add(client_ip)
-        # disable Nagle algo
-        #cl.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        request = cl.recv(8192)
-        #print(request)
-        handle_request(cl, sock, request)
-    except OSError as err:
-        if err.args[0] == errno.EAGAIN:
-            pass
-        else:
-            d_u.print_and_store_log(f"Error handling client connection: {err}")
-        try:
-            if 'cl' in locals() and cl:
-                cl.close()
-        except NameError:
-            pass # cl might not be defined if accept() failed
-        pass
-
-def redirect_to_slash(cl):
-    """ Redirect to / """
-    redirect_url = "/"
-    response_headers = [
-        "HTTP/1.1 303 See Other",
-        f"Location: {redirect_url}",
-        "Connection: close",
-        "",
-    ]
-    response = "\r\n".join(response_headers)
-    cl.sendall(response.encode())
-    cl.close()
-
-def handle_request(cl, sock, request):
-    """ Handle incoming HTTP requests """
-
-    response_content = ""
-    status_code = "200 OK"
-    content_type = "text/html"
-
-    if b'/BP1_ACTIF' in request:
-        d_u.print_and_store_log(f"ACTION: {c_v.nom_bp1} Complete ")
-        c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
-
-    elif b'/OPEN_B_ACTIF' in request:
-        d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
-        c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
-
-    elif b'/CLOSE_B_ACTIF' in request:
-        d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
-        c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
-
-    elif b'/BP2_ACTIF' in request:
-        d_u.print_and_store_log(f"ACTION: {c_v.nom_bp2} Complete")
-        c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
-
-    elif request.startswith('GET /EMERGENCY_STOP'):
-        d_u.print_and_store_log("ACTION: Emergency Stop actived!}")
-        if oled_d is not None: oled_d.poweron()
-        with open('/EMERGENCY_STOP', 'w') as file:
-            file.write('Emergency stop is active and requires reboot.')
-        d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
-        c_r.ctrl_relay_off()
-        # Remove both /BP1 and /BP2 files to reflect that no operation is active.
-        # This ensures the /status endpoint returns False for both active flags.
-        try:
-            LIST_F = ["BP1", "BP2"]
-            for TODO in LIST_F:
-                try:
-                    os.remove(TODO)
-                except OSError:
-                    pass
-            d_u.print_and_store_log("Force all Buttons OFF")
-        except OSError:
-            pass
-        response_content = "Emergency Stop activated"
-        content_type = "text/plain"
-
-    elif b'/status' in request:
-        bp1_active = d_u.file_exists('/BP1')
-        bp2_active = d_u.file_exists('/BP2')
-        emergency_stop = d_u.file_exists('/EMERGENCY_STOP')
-        in_progress = d_u.file_exists('/IN_PROGRESS')
-        status_data = {
-            "BP1_active": bp1_active,
-            "BP2_active": bp2_active,
-            "Emergency_stop": emergency_stop,
-            "In_progress": in_progress
-            }
-        response_content = ujson.dumps(status_data)
-        content_type = "application/json"
-
-    elif request.startswith('GET /UPLOAD_file'):
-        d_u.print_and_store_log("UPLOAD_file displayed")
-        response_content = w_f_m.serve_file_management_page()
-    elif request.startswith('POST /UPLOAD_file'):
-        d_u.print_and_store_log("UPLOAD_file file in progress")
-        response_from_file_m = w_f_m.handle_upload(cl, sock, request)
-        cl.sendall(response_from_file_m.encode('utf-8'))
-        utime.sleep(0.5)
-
-    elif request.startswith('GET /file_management'):
-        d_u.print_and_store_log("Show File management web page")
-        response_content = w_f_m.serve_file_management_page()
-
-    elif request.startswith('GET /SAVE_config'):
-        response_content = w_c.serve_config_page()
-    elif request.startswith('POST /SAVE_config'):
-        response_from_save_config = s_c.save_configuration(request)
-        # Check if the returned value is a redirect response
-        if response_from_save_config.startswith("HTTP/1.1 30"):
-            cl.sendall(response_from_save_config.encode('utf-8'))
-            cl.close()
-            return
-        else:
-            response_content = response_from_save_config
-
-    elif b'/log.txt' in request:
-        try:
-            with open('/log.txt', 'r') as file:
-                response_content = file.read()
-            content_type = "text/plain"
-            status_code = "200 OK"
-        except FileNotFoundError:
-            response_content = "Log file not found."
-            content_type = "text/plain"
-            status_code = "404 Not Found"
-    elif b'/livelog' in request and request.startswith(b'GET'):
-        response_content = w_l.create_log_page()
-        content_type = "text/html"
-        status_code = "200 OK"
-    
-    elif b'/get_log_action' in request:
-        response = w_l.serve_log_file(4, "ACTION")
-        cl.sendall(response.encode('utf-8'))
-        return
-
-    elif b'/get_log_upload' in request:
-        response = w_l.serve_log_file(10, "UPLOAD")
-        cl.sendall(response.encode('utf-8'))
-        return
-
-    elif b'/RESET_device' in request:
-        d_u.print_and_store_log("Reset button pressed")
-        reset()
-
-    elif b'/view' in request and request.startswith(b'GET'):
-        d_u.print_and_store_log("Entering view file")
-        request_str = request.decode('utf-8')
-        file_to_view = request_str.split('file=', 1)[1].split(' ')[0]
-        try:
-            if file_to_view == "config_var.py":
-                # Dont show config_var with all code access
-                response_content = "File not Allowed!"
-                content_type = "text/plain"
-                status_code = "404 Not Found"
-            elif d_u.file_exists("/"+file_to_view):
-                response_content = w_f_m.create_view_file_page("/"+file_to_view)
-                content_type = "text/html"
-                status_code = "200 OK"
-            else:
-                response_content = "File not found"
-                content_type = "text/plain"
-                status_code = "404 Not Found"
-        except IndexError:
-            response_content = "Bad request: file parameter missing"
-            content_type = "text/plain"
-            status_code = "400 Bad Request"
-
-    elif b'/file_management' in request:
-        response_content = w_f_m.serve_file_management_page()
-
-    elif b'/revert_mode' in request:
-        d_u.print_and_store_log("ACTION: Entering Revert mode")
-        if d_u.file_exists('/BP1'):
-            d_u.print_and_store_log("Revert mode creating BP2")
-            os.remove("/BP1")
-            with open('/BP2', 'w') as file:
-                file.write('Create BP2 after revert')
-        elif d_u.file_exists('/BP2'):
-            d_u.print_and_store_log("Revert mode creating BP1")
-            os.remove("/BP2")
-            with open('/BP1', 'w') as file:
-                file.write('Create BP1 after revert')
-        redirect_to_slash(cl)
-        return
-    elif request.startswith('GET /delete'):
-        request_str = request.decode('utf-8')
-        file_to_delete_encoded = request_str.split('file=', 1)[1].split(' ')[0]
-        file_to_delete = d_u.urldecode(file_to_delete_encoded)
-        d_u.print_and_store_log(f"File {file_to_delete}")
-        try:
-            os.remove(file_to_delete)
-            d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
-            response_content = "File deleted. <a href='/file_management'>Return to File Manager</a>"
-        except OSError as e:
-            response_content = f"Error deleting file: {e}"
-    else:
-        response_content = w_cmd.create_html_response()
-        content_type = "text/html"
-
-    response = (
-        f"HTTP/1.1 {status_code}\r\n"
-        f"Content-Type: {content_type}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        f"{response_content}"
-    )
-    cl.sendall(response.encode())
-    cl.close()
-
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
     if ap:
@@ -318,16 +114,241 @@ def start_WIFI_ap():
         ERR_WIFI = True
     return ap, ERR_WIFI
 
+@ws_app.before_request
+def log_client_ip(request):
+    client_ip = request.client_addr[0]
+    if client_ip not in connected_ips:
+        d_u.print_and_store_log(f"@ws_app Client connected from {client_ip}")
+        connected_ips.add(client_ip)
+
+@ws_app.route('/')
+def index(request):
+    return w_cmd.create_html_response(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/BP1_ACTIF', methods=['POST'])
+def bp1_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_bp1} Complete")
+    c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
+    return "", 200
+
+@ws_app.route('/OPEN_B_ACTIF', methods=['POST'])
+def open_b_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
+    c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
+    return "", 200
+
+@ws_app.route('/CLOSE_B_ACTIF', methods=['POST'])
+def close_b_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
+    c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
+    return "", 200
+
+@ws_app.route('/BP2_ACTIF', methods=['POST'])
+def bp2_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_bp2} Complete")
+    c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
+    return "", 200
+
+@ws_app.route('/EMERGENCY_STOP', methods=['POST'])
+def emergency_stop(request):
+    d_u.print_and_store_log("ACTION: Emergency Stop activated!")
+    if oled_d is not None:
+        oled_d.poweron()
+    with open('/EMERGENCY_STOP', 'w') as file:
+        file.write('Emergency stop is active and requires reboot.')
+    d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
+    c_r.ctrl_relay_off()
+    for todo in ["BP1", "BP2"]:
+        try:
+            os.remove(todo)
+        except OSError:
+            pass
+    d_u.print_and_store_log("Force all Buttons OFF")
+    return "Emergency Stop activated", 200, {"Content-Type": "text/plain"}
+
+@ws_app.route('/status', methods=['GET'])
+def status(request):
+    bp1_active = d_u.file_exists('/BP1')
+    bp2_active = d_u.file_exists('/BP2')
+    emergency_stop = d_u.file_exists('/EMERGENCY_STOP')
+    in_progress = d_u.file_exists('/IN_PROGRESS')
+    status_data = {
+        "BP1_active": bp1_active,
+        "BP2_active": bp2_active,
+        "Emergency_stop": emergency_stop,
+        "In_progress": in_progress
+    }
+    return ujson.dumps(status_data), 200, {"Content-Type": "application/json"}
+
+@ws_app.route('/file_management')
+def file_management(request):
+    d_u.print_and_store_log("Show File management web page")
+    return w_f_m.serve_file_management_page(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/web_config', methods=['GET', 'POST'])
+def upload_server(request):
+    response = w_c.serve_config_page(IP_ADDR, WS_PORT)
+    return response, 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/save_config', methods=['GET', 'POST'])
+def upload_file(request):
+    return Response(
+        status_code=307,
+        headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/save_config"}
+    )
+
+@ws_app.route('/log.txt')
+def log_file(request):
+    try:
+        with open('/log.txt', 'r') as file:
+            return file.read(), 200, {"Content-Type": "text/plain"}
+    except FileNotFoundError:
+        return "Log file not found.", 404, {"Content-Type": "text/plain"}
+
+@ws_app.route('/livelog')
+def livelog(request):
+    return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/get_log_action')
+def get_log_action(request):
+    response, status_code, headers = w_l.serve_log_file(4, "ACTION")
+    return response, status_code, headers
+
+@ws_app.route('/get_log_upload')
+def get_log_upload(request):
+    response, status_code, headers = w_l.serve_log_file(10, "UPLOAD")
+    return response, status_code, headers
+
+@ws_app.route('/RESET_device')
+def reset_device(request):
+    d_u.print_and_store_log("Reset button pressed")
+    reset()
+
+@ws_app.route('/view')
+def view_file(request):
+    file_to_view = request.args.get('file')
+    if file_to_view == "config_var.py":
+        return "File not Allowed!", 404, {"Content-Type": "text/plain"}
+    elif d_u.file_exists("/" + file_to_view):
+        return w_f_m.create_view_file_page("/" + file_to_view), 200, {"Content-Type": "text/html"}
+    else:
+        return "File not found", 404, {"Content-Type": "text/plain"}
+
+@ws_app.route('/revert_mode')
+def revert_mode(request):
+    d_u.print_and_store_log("ACTION: Entering Revert mode")
+    if d_u.file_exists('/BP1'):
+        d_u.print_and_store_log("Revert mode creating BP2")
+        os.remove("/BP1")
+        with open('/BP2', 'w') as file:
+            file.write('Create BP2 after revert')
+    elif d_u.file_exists('/BP2'):
+        d_u.print_and_store_log("Revert mode creating BP1")
+        os.remove("/BP2")
+        with open('/BP1', 'w') as file:
+            file.write('Create BP1 after revert')
+            
+    return Response(status_code=303, headers={"Location": "/"})
+
+@ws_app.route('/delete')
+def delete_file(request):
+    file_to_delete = request.args.get('file')
+    d_u.print_and_store_log(f"File {file_to_delete}")
+    try:
+        os.remove(file_to_delete)
+        d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
+        return Response(status_code=303, headers={"Location": "/file_management"})
+    except OSError as e:
+        return f"Error deleting file: {e}", 400, {"Content-Type": "text/plain"}
+
+@ws_app.route('/UPLOAD_server', methods=['GET', 'POST'])
+def upload_server(request):
+    response = w_u.serve_file_upload_page(IP_ADDR, WS_PORT)
+    return response, 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/upload_file', methods=['GET', 'POST'])
+def upload_file(request):
+    return Response(
+        status_code=307,
+        headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/upload"}
+    )
+
+def start_socket_server(ipaddr, port):
+    d_u.print_and_store_log("Starting the Socket server")
+    """
+    Starts a socket server to handle HTTP requests for file uploads.
+
+    Args:
+        ipaddr (str): The IP address to bind the server to (e.g., '0.0.0.0').
+        port (int): The port to listen on (e.g., 80).
+    """
+    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    addr = socket.getaddrinfo(ipaddr, port)[0][-1]
+    soc.bind(addr)
+    soc.listen(5)
+    d_u.print_and_store_log(f"SERVER: Listening on http://{ipaddr}:{port}")
+
+    while True:
+        cl = None
+        try:
+            gc.collect()
+            cl, addr = soc.accept()
+            d_u.print_and_store_log(f"SERVER: Client connected from {addr}")
+            request = cl.recv(4096)
+            if not request:
+                cl.close()
+                continue
+            first_line = request.split(b'\r\n')[0]
+            response = ""
+            try:
+                method, path, _ = first_line.decode('utf-8').split()
+                d_u.print_and_store_log(f"SERVER: Received {method} request for {path}")
+                if method == 'POST' and path.startswith('/upload/'):
+                    response = w_u.handle_upload_simple(cl, soc, request, IP_ADDR)
+                if method == 'POST' and path.startswith('/save_config'):
+                    response = s_c.save_configuration(request, IP_ADDR)   
+                elif method == 'GET' and path == '/':
+                    response = w_u.serve_file_upload_page()
+                else:
+                    response = "HTTP/1.1 404 Not Found\r\n\r\nNot Found"
+            
+            except Exception as err:
+                d_u.print_and_store_log(f"SERVER: Error parsing request: {err}")
+                response = "HTTP/1.1 400 Bad Request\r\n\r\nBad Request"
+
+            if response:
+                if isinstance(response, tuple): # Handling responses like (content, status, headers)
+                    content, status, headers = response
+                    http_response = f"HTTP/1.1 {status}\r\n"
+                    for k, v in headers.items():
+                        http_response += f"{k}: {v}\r\n"
+                    http_response += f"\r\n{content}"
+                    cl.sendall(http_response.encode('utf-8'))
+                else:
+                    cl.sendall(response.encode('utf-8'))
+            
+            cl.close()
+
+        except OSError as e:
+            d_u.print_and_store_log(f"SERVER: Connection Error: {e}")
+            if cl:
+                cl.close()
+        except Exception as e:
+            d_u.print_and_store_log(f"SERVER: A critical error occurred: {e}")
+            if cl:
+                cl.close()
+
 def main():
     """ The Main one ! """
-    global door_state
-    global statusd
     sock = None
     global oled_d
     global IP_ADDR
     global PORT
+    global WS_PORT
+    WS_PORT = 8080
     ap = None
-    hour = 12
     # ERR_* are used to display LED color in case of...
     global ERR_SOCKET, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI, ERR_OLED
     ERR_SOCKET = False
@@ -375,47 +396,8 @@ def main():
                 IP_ADDR = c_v.AP_IP[0]
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
-    # Read the initial state of the door sensor
-    door_state = door_sensor.value()
-    d_u.print_and_store_log(f"Information sur {c_v.DOOR}:")
-    if door_state == 0:
-        statusd = "Status: OUVERT"
-        led.value(1)
-    elif door_state == 1:
-        statusd = "Status: FERME"
-        led.value(0)
 
-    d_u.print_and_store_log(statusd)
-    o_s.oled_show_text_line(statusd, 10)
-
-    ports_to_try = [80, 81]  # List of ports to try in order
-    for port in ports_to_try:
-        o_s.oled_show_text_line("", 20)
-        if IP_ADDR and IP_ADDR != '0.0.0.0':
-            addr = socket.getaddrinfo(IP_ADDR, port)[0][-1]
-            sock = socket.socket()
-            try:
-                sock.bind(addr)
-                o_s.oled_show_text_line(f"Socket Ok: {port}", 20)
-                sock.listen(5)
-                sock.setblocking(False)
-                o_s.oled_show_text_line("Listening Ok", 30)
-                d_u.print_and_store_log(f'Listening on {addr}')
-                e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
-                PORT = port
-                ERR_SOCKET = False
-                break
-            except OSError as err:
-                d_u.print_and_store_log(f"Failed to bind to port {port}: {err}")
-                o_s.oled_show_text_line("", 20)
-                o_s.oled_show_text_line(f"Socket :{port} NOK!", 20)
-                e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
-                ERR_SOCKET = True
-        else:
-            d_u.print_and_store_log('Trouble with WIFI')
-            o_s.oled_show_text_line("WIFI AP NOK!", 40)
-            ERR_WIFI = True
-            internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
+    _thread.start_new_thread(start_socket_server, (IP_ADDR, WS_PORT))
 
     if oled_d is None:
         ERR_OLED = True
@@ -435,30 +417,25 @@ def main():
 
     # We are ready
     check_and_display_error()
-    while True:
-        prev_door_state = door_state
-        door_state = door_sensor.value()
-        if prev_door_state == 0 and door_state == 1:
-            led.value(0)
-            e_l.internal_led_color(e_l.red)
-            statusd = "Status: FERME"
-            d_u.print_and_store_log(statusd)
-
-        elif prev_door_state == 1 and door_state == 0:
-            led.value(1)
-            e_l.internal_led_color(e_l.green)
-            statusd = "Status: OUVERT"
-            d_u.print_and_store_log(statusd)
-
-        hour %= 24
-        if 6 <= hour < 23:
-            oled_constant_show()
+    
+    ports_to_try = [80, 81]  # List of ports to try in order
+    for port in ports_to_try:
+        o_s.oled_show_text_line("", 20)
+        if IP_ADDR and IP_ADDR != '0.0.0.0':
+            try:
+                asyncio.run(d_m.start_microdot_ws(IP_ADDR, port))
+                PORT = port
+            except Exception as err:
+                d_u.print_and_store_log(f"Server error: {err}")
+                ERR_SOCKET = True
+            finally:
+                asyncio.new_event_loop()
         else:
-            if oled_d is not None: oled_d.poweroff()
+            d_u.print_and_store_log('Trouble with WIFI')
+            o_s.oled_show_text_line("WIFI AP NOK!", 40)
+            ERR_WIFI = True
+            internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
-        if sock:
-            handle_client_connection(sock)
-        utime.sleep(0.1)
 
 if __name__ == "__main__":
     main()
