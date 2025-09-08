@@ -78,8 +78,8 @@ def create_html_response():
             display: inline-block;
             margin: 8px;
             flex-grow: 1;
-            padding: 22px 36px;
-            font-size: 20px;
+            padding: 20px 34px;
+            font-size: 16px;
             color: white;
             background-color: #007BFF;
             border: none;
