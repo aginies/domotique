@@ -67,7 +67,7 @@ def check_and_display_error():
     if ERR_CTRL_RELAY is True:
         e_l.internal_led_blink(e_l.pink, e_l.led_off, 1, 0.1)
 
-def oled_constant_show():
+def oled_constant_show(IP_ADDR, PORT):
     """ Data always displayed """
     if oled_d:
         mcu_t = esp32.mcu_temperature()
@@ -100,6 +100,7 @@ def oled_constant_show():
             oled_d.text("", 0, 50)
             oled_d.text("REBOOT NEEDED!", 0, 50)
         oled_d.show()
+        time.sleep(1)
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
@@ -341,6 +342,7 @@ def main():
     global oled_d
     global IP_ADDR
     global PORT
+    PORT = 80
     global WS_PORT
     WS_PORT = 8080
     ap = None
@@ -393,6 +395,7 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
     _thread.start_new_thread(start_socket_server, (IP_ADDR, WS_PORT))
+    _thread.start_new_thread(oled_constant_show, (IP_ADDR, PORT))
 
     if oled_d is None:
         ERR_OLED = True
@@ -413,24 +416,20 @@ def main():
     # We are ready
     check_and_display_error()
     
-    ports_to_try = [80, 81]  # List of ports to try in order
-    for port in ports_to_try:
-        o_s.oled_show_text_line("", 20)
-        if IP_ADDR and IP_ADDR != '0.0.0.0':
-            try:
-                asyncio.run(d_m.start_microdot_ws(IP_ADDR, port))
-                PORT = port
-            except Exception as err:
-                d_u.print_and_store_log(f"Server error: {err}")
-                ERR_SOCKET = True
-            finally:
-                asyncio.new_event_loop()
-        else:
-            d_u.print_and_store_log('Trouble with WIFI')
-            o_s.oled_show_text_line("WIFI AP NOK!", 40)
-            ERR_WIFI = True
-            internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
-
+    o_s.oled_show_text_line("", 20)
+    if IP_ADDR and IP_ADDR != '0.0.0.0':
+        try:
+            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT))
+        except Exception as err:
+            d_u.print_and_store_log(f"Server error: {err}")
+            ERR_SOCKET = True
+        finally:
+            asyncio.new_event_loop()
+    else:
+        d_u.print_and_store_log('Trouble with WIFI')
+        o_s.oled_show_text_line("WIFI AP NOK!", 40)
+        ERR_WIFI = True
+        internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
 if __name__ == "__main__":
     main()
