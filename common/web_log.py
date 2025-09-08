@@ -3,6 +3,7 @@
 
 from collections import deque
 import config_var as c_v
+import utime
 
 def create_log_page():
     """ Creates the HTML page for viewing the log with auto-refresh. """
@@ -68,16 +69,51 @@ def create_log_page():
                     console.error('Error fetching log:', error);
                 }});
         }}
-
-        // Fetch log immediately on page load
         fetchLog();
-
-        // Set up polling to refresh every 1.5 seconds
-        setInterval(fetchLog, 1500);
+        setInterval(fetchLog, 2000);
     </script>
 </body>
 </html>"""
     return html
+
+jours = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+# Month tuple (index 0 = January)
+mois = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")
+
+def format_log_line(line, pattern_c):
+    """
+    Takes one raw log line and returns it with a formatted date and time.
+    If formatting fails, it returns the original line.
+    """
+    if pattern_c not in line:
+        return line
+
+    try:
+        parts = line.split(pattern_c, 1)
+        datetime_str = parts[0].strip()
+        message = parts[1].strip()
+        date_part, time_part = datetime_str.split(' ')
+        clean_time = time_part.rstrip(':')
+        year, month, day = [int(p) for p in date_part.split('-')]
+        timestamp = utime.mktime((year, month, day, 0, 0, 0, 0, 0))
+        weekday_index = utime.localtime(timestamp)[6] # 0=Monday
+        jour_nom = jours[weekday_index]
+        mois_nom = mois[month - 1]
+        formatted_date = f"{jour_nom} {day} {mois_nom} {year}"
+        hour, minute, second = [int(p) for p in clean_time.split(':')]
+        # We only need the date to find the day of the week
+        formatted_time = f"{hour:02d}:{minute:02d}:{second:02d}"        
+        return f"{formatted_date} {formatted_time} {message}"
+
+    except (ValueError, IndexError):
+        return line
+
+def get_formatted_log_summary(log_lines, pattern_c):
+    """
+    Takes a list of raw log lines and returns them as a single formatted string.
+    """
+    formatted_lines = (format_log_line(line, pattern_c) for line in log_lines)
+    return "\n".join(formatted_lines)
 
 def serve_log_file(nb_lines, pattern_c):
     try:
@@ -85,8 +121,12 @@ def serve_log_file(nb_lines, pattern_c):
             log_lines = f.readlines()
             action_lines = [line for line in log_lines if pattern_c in line]
             last_x_lines = action_lines[-nb_lines:]
-            log_content = "".join(last_x_lines)
-            return log_content
-            #return "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n" + log_content
-    except OSError:
-        return "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nLog file not found"
+            formatted_content = get_formatted_log_summary(last_x_lines, pattern_c)
+            log_content = "".join(formatted_content)
+            if log_content:
+                return log_content, 200, {"Content-Type": "text/plain"}
+            else:
+                return "No matching log lines found", 200, {"Content-Type": "text/plain"}  # Return a valid response
+    except OSError as err:
+        print(f"Error reading log file: {err}")
+        return "Log file not found", 404, {"Content-Type": "text/plain"}
