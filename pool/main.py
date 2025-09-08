@@ -36,11 +36,6 @@ connected_ips = set()
 # LED EXTERNAL
 led = Pin(c_v.LED_PIN, Pin.OUT)
 
-# DOOR MAGNET
-door_sensor = Pin(c_v.DOOR_SENSOR_PIN, Pin.IN, Pin.PULL_UP)
-door_state = door_sensor.value()
-prev_door_state = door_state
-
 # SEtting OFF RELAY for BP1 and BP2
 c_r.relay1.off()
 c_r.relay2.off()
@@ -186,12 +181,12 @@ def file_management(request):
     return w_f_m.serve_file_management_page(), 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/web_config', methods=['GET', 'POST'])
-def upload_server(request):
+def web_config(request):
     response = w_c.serve_config_page(IP_ADDR, WS_PORT)
     return response, 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/save_config', methods=['GET', 'POST'])
-def upload_file(request):
+def save_config(request):
     return Response(
         status_code=307,
         headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/save_config"}
