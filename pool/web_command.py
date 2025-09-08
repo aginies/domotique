@@ -214,7 +214,7 @@ def create_html_response():
         .footer-buttons {{
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 10px;
             margin-bottom: 0px;
         }}
     </style>
