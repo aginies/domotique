@@ -308,18 +308,22 @@ def create_view_file_page(file_path):
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }}
-        pre {{
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            overflow-x: auto;
-        }}
         a {{
             color: #3498db;
             text-decoration: none;
         }}
         a:hover {{
             text-decoration: underline;
+        }}
+        pre code.hljs {{
+            padding: 1em;
+        }}
+        .hljs-ln-numbers {{
+            text-align: center;
+            color: #ccc;
+            border-right: 1px solid #999;
+            vertical-align: top;
+            padding-right: 5px !important;
         }}
     </style>
 </head>
@@ -330,11 +334,13 @@ def create_view_file_page(file_path):
         <pre><code class="language-python">{escaped_content}</code></pre>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>    <!-- Initialize Highlight.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/highlightjs-line-numbers.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {{
             if (typeof hljs !== 'undefined') {{
                 hljs.highlightAll();
-                console.log("Highlight.js initialized and applied.");
+                 hljs.initLineNumbersOnLoad();
+                console.log("Highlight.js and lines number initialized and applied.");
             }} else {{
                 console.error("Highlight.js not loaded!");
             }}
