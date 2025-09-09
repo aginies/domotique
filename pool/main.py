@@ -41,7 +41,6 @@ c_r.relay1.off()
 c_r.relay2.off()
 
 global cl
-global sock_2
 
 # At start we can only Open the Pool
 # remove all previous ERROR
@@ -327,12 +326,12 @@ def start_socket_server(ipaddr, port):
             
             cl.close()
 
-        except OSError as e:
-            d_u.print_and_store_log(f"SERVER: Connection Error: {e}")
+        except OSError as err:
+            d_u.print_and_store_log(f"SERVER: Connection Error: {err}")
             if cl:
                 cl.close()
-        except Exception as e:
-            d_u.print_and_store_log(f"SERVER: A critical error occurred: {e}")
+        except Exception as err:
+            d_u.print_and_store_log(f"SERVER: A critical error occurred: {err}")
             if cl:
                 cl.close()
 
