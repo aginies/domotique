@@ -74,16 +74,21 @@ def create_html_response():
             background-color: rgba(0, 0, 0, 0.5);
             padding: 10px;
         }}
+        .footer-buttons {{
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 0px;
+        }}
         #timestamp {{
             margin-top: 20px;
             font-size: 16px;
             color: #555;
         }}
         .config-button {{
-            display: block;
-            margin: 10px auto;
+            display: inline-block;
             padding: 8px 16px;
-            font-size: 12px;
+            font-size: 10px;
             color: white;
             background-color: #373837;
             border: none;
@@ -104,6 +109,15 @@ def create_html_response():
         <button id="BP1" class="button">BP1</button>
         <div id="timestamp"></div>
         <div id="user-agent"></div>
+   </div>
+    <div class="footer">
+        <div class="footer-buttons">
+            <a href="/web_config" target="_blank" class="config-button">Configurer</a>
+            <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
+            <a href="/file_management" target="_blank" class="config-button">Explorer</a>
+            <a href="mailto:antoine@ginies.org" class="config-button">Antoine</a>
+    </div>
+</body>
     <script>
         document.getElementById('BP1').addEventListener('click', function() {
             fetch('/BP1_ACTIF', { method: 'POST' })
@@ -119,11 +133,5 @@ def create_html_response():
             document.getElementById('timestamp').textContent = 'Dernier clic: ' + timestamp;
         });
     </script>
-    </div>
-    <div class="footer">
-        <!--<button id="CONFIG" class="config-button">Configurer</button>-->
-        <p>antoine@ginies.org</p>
-    </div>
-</body>
 </html>"""
     return html
