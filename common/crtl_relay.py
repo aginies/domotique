@@ -17,6 +17,16 @@ last_ctrl_relay_time = 0
 relay1 = Pin(c_v.RELAY1_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 
+def emergency_manage_files():
+    """ manage files if emergency clicked """
+    # If stopped by emergency, ensure files are cleared
+    TO_REMOVE = ["/BP1", "/BP2", "/IN_PROGRESS"]
+    for doit in TO_REMOVE:
+        try:
+            os.remove(doit)
+        except OSError:
+            pass
+
 def ctrl_relay(which_one, duration):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
@@ -34,37 +44,24 @@ def ctrl_relay(which_one, duration):
         d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
         start_time = utime.time()
         last_print_time = start_time
-        if not check_stop_relay():
-            while utime.time() - start_time < duration:
-                if check_stop_relay():
-                    d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
-                    relay.off()
-                    break
+        while utime.time() - start_time < duration:
+            if check_stop_relay():
+                d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
+                relay.off()
+                emergency_manage_files()
+                break
+            else:
                 current_time = utime.time()
                 if current_time - last_print_time >= 5:
                     elapsed_time = current_time - start_time
                     d_u.print_and_store_log(f"Relay {which_one} has been ON for {elapsed_time:.1f} seconds. ({duration - elapsed_time:.1f}s remaining).")
                     last_print_time = current_time
-                utime.sleep_ms(100)
+            utime.sleep_ms(100)
 
-            if relay.value() == 1:
-                d_u.print_and_store_log(f"Switching Relay {which_one} as Off")
-                relay.off()
+        if relay.value() == 1:
+            d_u.print_and_store_log(f"Switching Relay {which_one} as Off")
+            relay.off()
 
-        else:
-            # If stopped by emergency, ensure files are cleared
-            try:
-                os.remove("/BP1")
-            except OSError:
-                pass
-            try:
-                os.remove("/BP2")
-            except OSError:
-                pass
-        try:
-            os.remove("/IN_PROGRESS")
-        except OSError:
-            pass
         lock.release()
         gc.collect()
 
@@ -76,7 +73,8 @@ def ctrl_relay(which_one, duration):
         ERR_CTRL_RELAY = True
 
 def check_stop_relay():
-    d_u.file_exists("/EMERGENCY_STOP")
+    test = d_u.file_exists("/EMERGENCY_STOP")
+    return test
 
 def ctrl_relay_off():
     """ Force all relay Off! """
