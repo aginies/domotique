@@ -6,9 +6,15 @@
 # No more than 13 characters or you won't see it on the ssd1306
 DOOR = "Portail"
 
+# Name of the button
+nom_bp1 = "Boutton 1"
+
 # on ESP32-S3 you must sold the RGB pin on the board!
 # INTERNAL LED (PIN 48)
 I_LED_PIN = 48
+
+# ESP32-S3 CPU freq
+CPU_FREQ=240
 
 # CHOOSE AP OR EXISTING WIFI
 # E_WIFI is True you will use a existing Wifi

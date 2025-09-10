@@ -3,9 +3,13 @@
 
 import config_var
 
+with open('/VERSION', 'r') as file:
+   version = file.read().strip()
+
 # Load existing configuration
 config = {
     "DOOR": config_var.DOOR,
+    "nom_bp1": config_var.nom_bp1,
     "E_WIFI": config_var.E_WIFI,
     "WIFI_SSID": config_var.WIFI_SSID,
     "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
@@ -22,10 +26,23 @@ config = {
     "time_ok": config_var.time_ok,
     "time_err": config_var.time_err,
     "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
-    "OLED_SDA_PIN": config_var.OLED_SDA_PIN
+    "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
+    "CPU_FREQ": config_var.CPU_FREQ,
+    "VERSION": version,
 }
 
-def serve_config_page():
+def serve_config_page(IP_ADDR, WS_PORT):
+    selected_options = {
+        'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
+        'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
+        'selected_80': 'selected' if config_var.CPU_FREQ == 80 else '',
+        'selected_160': 'selected' if config_var.CPU_FREQ == 160 else '',
+        'selected_240': 'selected' if config_var.CPU_FREQ == 240 else '',
+    }
+    net_config = {
+        'IP_ADDR': IP_ADDR,
+        'WS_PORT': WS_PORT,
+    }
     html = """
 <!DOCTYPE html>
 <html lang="en">
@@ -93,15 +110,47 @@ def serve_config_page():
             margin-bottom: 20px;
             border-left: 4px solid #3498db;
         }}
+        select {{
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+            background-color: #f9f9f9;
+        }}
+        .cancel-button {{
+            background-color: #95a5a6;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none; /* Removes underline from the link */
+            display: inline-block;
+            transition: background-color 0.3s;
+        }}
+        .cancel-button:hover {{
+            background-color: #7f8c8d;      
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Configuration pour la {DOOR}</h1>
-        <form id="configF" action="/SAVE_config" method="POST">
+        <h1>Configuration pour {DOOR} ({VERSION})</h1>
+        <form id="configForm" action="/save_config" method="POST">
             <div class="group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
+            </div>
+            <div class="section">
+                <h2>Boutton</h2>
+                <div class="form-group">
+                    <label for="nom_bp1">Nom du Boutton 1:</label>
+                    <input type="text" id="nom_bp1" name="nom_bp1" value="{nom_bp1}">
+                </div>
             </div>
             <div class="section">
                 <h2>WIFI</h2>
@@ -133,6 +182,16 @@ def serve_config_page():
 
             <div class="section">
                 <h2>Advanced</h2>
+                <div class="form-group">
+                    <label for="CPU_FREQ">CPU frequency of the ESP32:</label>
+                    <select id="CPU_FREQ" name="CPU_FREQ">
+                        <option value="20" {selected_20}>20 MHz</option>
+                        <option value="40" {selected_40}>40 MHz</option>
+                        <option value="80" {selected_80}>80 MHz</option>
+                        <option value="160" {selected_160}>160 MHz</option>
+                        <option value="240" {selected_240}>240 MHz</option>
+                    </select>
+                </div>
                 <div class="group">
                     <label for="I_LED_PIN">Internal LED Pin:</label>
                     <input type="number" id="I_LED_PIN" name="I_LED_PIN" value="{I_LED_PIN}">
@@ -170,30 +229,21 @@ def serve_config_page():
                     <input type="number" step="1" id="OLED_SDA_PIN" name="OLED_SDA_PIN" value="{OLED_SDA_PIN}">
                 </div>
             </div>
-        <input type="submit" value="Save Configuration">
+        <div class="button-group">
+            <form id="configForm" action="/save_config" method="POST" enctype="multipart/form-data">
+                <input type="submit" value="Save">
+            </form>
+        <a href="/" class="cancel-button">Cancel</a>
     </form> 
     </div>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {{
-            const configF = document.getElementById('configF');
-            if (configF) {{
-                console.log("in configF");
-                configF.addEventListener('submit', function(event) {{
-                    // Prevent the default form submission immediately
-                    event.preventDefault();
-                    console.log("post preventDefault");
-                    const confirmation = confirm("Êtes-vous sûr de vouloir sauvegarder la configuration ? Redémarrage obligatoire du dispositif.");
-                    // setTimeout(() => {{ console.log(" 2 seconds."); }}, 2000);                    
-                    if (confirmation) {{
-                        console.log("Configuration save confirmed. Submitting form...");
-                        this.submit();
-                    }} else {{
-                        console.log("Configuration save cancelled.");
-                    }}
-                }});
-            }}
-        }});
+        const configForm = document.getElementById('configForm');
+        const configServerUrl = 'http://{IP_ADDR}:{WS_PORT}';
+        configForm.addEventListener('change', () => {{
+            configForm.action = configServerUrl + '/save_config/';
+            console.log('Form action set to:', configForm.action);
+        }};
     </script>
 </body>
-</html>""".format(**config)
+</html>""".format(**config, **net_config, **selected_options)
     return html
