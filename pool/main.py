@@ -1,17 +1,14 @@
-# antoine@ginies.org
-# GPL3
-import socket
-import utime
-import os
-import ujson
-import asyncio
-from machine import Pin, reset
-import esp32 # get MCU temp
-import ure as re
-import _thread
+""" 
+ antoine@ginies.org
+ GPL3
+"""
 import time
-import socket
-import gc
+import os
+import asyncio
+import _thread
+import ujson
+from machine import Pin, reset
+import ure as re
 
 # Internal lib
 import web_command as w_cmd
@@ -21,10 +18,10 @@ import oled_ssd1306 as o_s
 import config_var as c_v
 import domo_wifi as d_w
 import web_config as w_c
-import save_config as s_c
 import web_files_management as w_f_m
 import web_log as w_l
 import crtl_relay as c_r
+import domo_socket_server as d_s_s
 import domo_microdot as d_m
 import web_upload as w_u
 from domo_microdot import ws_app
@@ -39,8 +36,6 @@ led = Pin(c_v.LED_PIN, Pin.OUT)
 # SEtting OFF RELAY for BP1 and BP2
 c_r.relay1.off()
 c_r.relay2.off()
-
-global cl
 
 # At start we can only Open the Pool
 # remove all previous ERROR
@@ -66,40 +61,22 @@ def check_and_display_error():
     if ERR_CTRL_RELAY is True:
         e_l.internal_led_blink(e_l.pink, e_l.led_off, 1, 0.1)
 
-def oled_constant_show(IP_ADDR, PORT):
+def oled_special_show():
     """ Data always displayed """
     if oled_d:
-        mcu_t = esp32.mcu_temperature()
-        temp_mcu = "Temp ESP32: " + str(mcu_t) + "C"
-        oled_d.fill(0)
-        SSID = c_v.AP_SSID
-        if c_v.E_WIFI is True:
-            if ERR_CON_WIFI is False:
-                SSID = c_v.WIFI_SSID
-        if ERR_SOCKET is False and ERR_WIFI is False:
-            oled_d.text("Wifi SSID:", 0, 0)
-            oled_d.text(SSID, 0, 10)
-            oled_d.text("Wifi IP AP:", 0, 20)
-            INFO_W = IP_ADDR +":"+ str(PORT)
-            oled_d.text(INFO_W, 0, 30)
-        else:
-            oled_d.text(" ! Warning !", 0, 0)
-            oled_d.text(" Wifi Pas OK", 0, 10)
-            oled_d.text(" ! ** !", 0, 20)
-            oled_d.text("Mode degrade!", 0, 30)
-        oled_d.text(temp_mcu, 0, 40)
-        if d_u.file_exists('/IN_PROGRESS'):
-            if d_u.file_exists('/BP1'):
-                oled_d.text("En Ouverture", 0, 50)
-            elif d_u.file_exists('/BP2'):
-                oled_d.text("En Fermeture", 0, 50)
-            else:
+        while True:
+            if d_u.file_exists('/IN_PROGRESS'):
+                if d_u.file_exists('/BP1'):
+                    oled_d.text("En Ouverture", 0, 50)
+                elif d_u.file_exists('/BP2'):
+                    oled_d.text("En Fermeture", 0, 50)
+                else:
+                    oled_d.text("", 0, 50)
+            if d_u.file_exists('/EMERGENCY_STOP'):
                 oled_d.text("", 0, 50)
-        if d_u.file_exists('/EMERGENCY_STOP'):
-            oled_d.text("", 0, 50)
-            oled_d.text("REBOOT NEEDED!", 0, 50)
-        oled_d.show()
-        time.sleep(1)
+                oled_d.text("REBOOT NEEDED!", 0, 50)
+            oled_d.show()
+            time.sleep(1)
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
@@ -268,76 +245,8 @@ def upload_file(request):
         headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/upload"}
     )
 
-def start_socket_server(ipaddr, port):
-    d_u.print_and_store_log("Starting the Socket server")
-    """
-    Starts a socket server to handle HTTP requests for file uploads.
-
-    Args:
-        ipaddr (str): The IP address to bind the server to (e.g., '0.0.0.0').
-        port (int): The port to listen on (e.g., 80).
-    """
-    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    soc.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    addr = socket.getaddrinfo(ipaddr, port)[0][-1]
-    soc.bind(addr)
-    soc.listen(5)
-    d_u.print_and_store_log(f"SERVER: Listening on http://{ipaddr}:{port}")
-
-    while True:
-        cl = None
-        try:
-            gc.collect()
-            cl, addr = soc.accept()
-            d_u.print_and_store_log(f"SERVER: Client connected from {addr}")
-            request = cl.recv(4096)
-            if not request:
-                cl.close()
-                continue
-            first_line = request.split(b'\r\n')[0]
-            response = ""
-            try:
-                method, path, _ = first_line.decode('utf-8').split()
-                d_u.print_and_store_log(f"SERVER: Received {method} request for {path}")
-                if method == 'POST' and path.startswith('/upload/'):
-                    response = w_u.handle_upload_simple(cl, soc, request, IP_ADDR)
-                if method == 'POST' and path.startswith('/save_config'):
-                    response = s_c.save_configuration(request, IP_ADDR)   
-                elif method == 'GET' and path == '/':
-                    response = w_u.serve_file_upload_page()
-                else:
-                    response = "HTTP/1.1 404 Not Found\r\n\r\nNot Found"
-            
-            except Exception as err:
-                d_u.print_and_store_log(f"SERVER: Error parsing request: {err}")
-                response = "HTTP/1.1 400 Bad Request\r\n\r\nBad Request"
-
-            if response:
-                if isinstance(response, tuple): # Handling responses like (content, status, headers)
-                    content, status, headers = response
-                    http_response = f"HTTP/1.1 {status}\r\n"
-                    for k, v in headers.items():
-                        http_response += f"{k}: {v}\r\n"
-                    http_response += f"\r\n{content}"
-                    cl.sendall(http_response.encode('utf-8'))
-                else:
-                    cl.sendall(response.encode('utf-8'))
-            
-            cl.close()
-
-        except OSError as err:
-            d_u.print_and_store_log(f"SERVER: Connection Error: {err}")
-            if cl:
-                cl.close()
-        except Exception as err:
-            d_u.print_and_store_log(f"SERVER: A critical error occurred: {err}")
-            if cl:
-                cl.close()
-
 def main():
     """ The Main one ! """
-    sock = None
     global oled_d
     global IP_ADDR
     global PORT
@@ -358,17 +267,10 @@ def main():
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
-    if oled_d:
-        oled_d.text(info_start, 0, 0)
-        info_control = "Version 1.0"
-        oled_d.text(info_control, 0, 10)
-        oled_d.text('https://github.c', 0, 20)
-        oled_d.text('om/aginies/domot', 0, 30)
-        oled_d.text('ique', 0, 40)
-        oled_d.text('ag@ginies.org', 0, 50)
-        oled_d.show()
-        utime.sleep(1)
-    if oled_d:
+    if oled_d is None:
+        ERR_OLED = True
+    else:
+        o_s.show_info_on_oled(info_start)
         oled_d.fill(0)
 
     if c_v.E_WIFI is False:
@@ -393,11 +295,10 @@ def main():
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
-    _thread.start_new_thread(start_socket_server, (IP_ADDR, WS_PORT))
-    _thread.start_new_thread(oled_constant_show, (IP_ADDR, PORT))
+    _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
+    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT))
+    _thread.start_new_thread(oled_special_show, ())
 
-    if oled_d is None:
-        ERR_OLED = True
     error_vars = {
         'Openning Socket': ERR_SOCKET,
         'OLED Screen': ERR_OLED,
@@ -414,7 +315,7 @@ def main():
 
     # We are ready
     check_and_display_error()
-    
+
     o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
         try:
@@ -428,7 +329,7 @@ def main():
         d_u.print_and_store_log('Trouble with WIFI')
         o_s.oled_show_text_line("WIFI AP NOK!", 40)
         ERR_WIFI = True
-        internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
+        e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
 if __name__ == "__main__":
     main()
