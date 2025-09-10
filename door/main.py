@@ -4,12 +4,14 @@ import socket
 import network
 import utime
 import _thread
+import asyncio
 import gc
-from machine import Pin
+from machine import Pin, reset
 import esp32 # get MCU temp
 
 # Internal libs
 import web_command as w_cmd
+import domo_utils as d_u
 import esp32_led as e_l
 import oled_ssd1306 as o_s
 import config_var as c_v
@@ -17,9 +19,15 @@ import domo_wifi as d_w
 import web_config as w_c
 import save_config as s_c
 import manage_rfid as m_r
+import web_files_management as w_f_m
+import web_log as w_l
+import crtl_relay as c_r
+import domo_microdot as d_m
+import web_upload as w_u
+import domo_socket_server as d_s_s
+from domo_microdot import ws_app
+from microdot import Microdot, send_file, Response
 
-lock = _thread.allocate_lock()
-shared_counter = 0
 
 # LIST OF CONNECTED CLIENTS
 connected_ips = set()
@@ -32,13 +40,9 @@ door_sensor = Pin(c_v.DOOR_SENSOR_PIN, Pin.IN, Pin.PULL_UP)
 door_state = door_sensor.value()
 prev_door_state = door_state
 
-# RELAY for BP1 and BP2
-# Be sure to put max power to the pin to control the relay
-last_ctrl_relay_time = 0
-relay1 = Pin(c_v.RELAY1_PIN, Pin.OUT, drive=Pin.DRIVE_3)
-relay1.off()
-relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
-relay2.off()
+# SEtting OFF RELAY for BP1 and BP2
+c_r.relay1.off()
+c_r.relay2.off()
 
 def check_and_display_error():
     """ In case of error display quickly the error color """
@@ -53,121 +57,113 @@ def check_and_display_error():
     if ERR_CTRL_RELAY is True:
         e_l.internal_led_blink(e_l.pink, e_l.led_off, 1, 0.1)
 
-def oled_constant_show():
+def oled_special_show():
     """ Data always displayed """
     if oled_d:
-        mcu_t = esp32.mcu_temperature()
-        temp_mcu = "Temp ESP32: " + str(mcu_t) + "C"
-        oled_d.fill(0)
-        SSID = c_v.AP_SSID
-        if c_v.E_WIFI is True:
-            if ERR_CON_WIFI is False:
-                SSID = c_v.WIFI_SSID
-        if ERR_SOCKET is False and ERR_WIFI is False:
-            oled_d.text("Wifi SSID:", 0, 0)
-            oled_d.text(SSID, 0, 10)
-            oled_d.text("Wifi IP AP:", 0, 20)
-            INFO_W = IP_ADDR +":"+ str(PORT)
-            oled_d.text(INFO_W, 0, 30)
-        else:
-            oled_d.text(" ! Attention !", 0, 0)
-            oled_d.text(" Wifi Pas OK", 0, 10)
-            oled_d.text(" ! ** !", 0, 20)
-            oled_d.text("Mode degrade!", 0, 30)
-        oled_d.text(temp_mcu, 0, 40)
         oled_d.text(statusd, 0, 50)
         oled_d.show()
 
-def ctrl_relay(which_one):
-    """ relay 1 or 2 """
-    try:
-        e_l.internal_led_blink(e_l.pink, e_l.led_off, 3, c_v.time_ok)
-        if which_one == 1:
-            relay1.on()
-            utime.sleep(0.2)
-            relay1.off()
-        else:
-            relay2.on()
-            utime.sleep(0.2)
-            relay2.off()
-    except OSError as err:
-        print(err)
-        relay1.value(0)
-        relay2.value(0)
-        e_l.internal_led_blink(e_l.pink, e_l.led_off, 5, time_err)
-        ERR_CTRL_RELAY = True
-        return None
+@ws_app.before_request
+def log_client_ip(request):
+    client_ip = request.client_addr[0]
+    if client_ip not in connected_ips:
+        d_u.print_and_store_log(f"@ws_app Client connected from {client_ip}")
+        connected_ips.add(client_ip)
 
-def handle_client_connection(sock):
-    """ At client connection send html stuff """
-    try:
-        cl, addr = sock.accept()
-        client_ip = addr[0]
-        if client_ip not in connected_ips:
-            print('Client connecté depuis', addr)
-            connected_ips.add(client_ip)
-        request = cl.recv(1024)
-        #print(request)
-        handle_request(cl, request)
-    except OSError as err:
-        if err.args[0] == errno.EAGAIN:
-            pass
-        else:
-            print("Error handling client connection:", err)
-        try:
-            if 'cl' in locals() and cl:
-                cl.close()
-        except NameError:
-            pass # cl might not be defined if accept() failed
-        pass
+@ws_app.route('/')
+def index(request):
+    return w_cmd.create_html_response(), 200, {"Content-Type": "text/html"}
 
-def handle_request(cl, request):
-    """ Gérer les requêtes HTTP entrantes """
-    global last_ctrl_relay_time
-    current_time = utime.time()
-    response_content = ""
-    status_code = "200 OK"
-    content_type = "text/html"
+@ws_app.route('/BP1_ACTIF', methods=['POST'])
+def bp1_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_bp1} Complete")
+    c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
+    return "", 200
 
-    if b'/BP1_ACTIF' in request:
-        if current_time - last_ctrl_relay_time > 3:
-            print("BP1 activé")
-            ctrl_relay(1)
-            last_ctrl_relay_time = current_time
-        else:
-            print("BP1 Duplicate request seen...")
-    elif b'/BP2_ACTIF' in request:
-        if current_time - last_ctrl_relay_time > 3:
-            print("BP2 activé")
-            ctrl_relay(1)
-            last_ctrl_relay_time = current_time
-        else:
-            print("BP2 Duplicate request seen...")
-        ctrl_relay(2)
-    elif request.startswith('GET /SAVE_config'):
-        response_content = w_c.serve_config_page()
-    elif request.startswith('POST /SAVE_config'):
-        response_from_save_config = s_c.save_configuration(request)
-        if response_from_save_config.startswith("HTTP/1.1 30"):
-            cl.sendall(response_from_save_config.encode('utf-8'))
-            cl.close()
-            return
-        else:
-            # If save_configuration returns regular content (e.g., an error message)
-            response_content = response_from_save_config
-    else:
-        response_content = w_cmd.create_html_response()
-        content_type = "text/html"
+@ws_app.route('/OPEN_B_ACTIF', methods=['POST'])
+def open_b_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
+    c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
+    return "", 200
 
-    response = (
-        f"HTTP/1.1 {status_code}\r\n"
-        f"Content-Type: {content_type}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        f"{response_content}"
+@ws_app.route('/CLOSE_B_ACTIF', methods=['POST'])
+def close_b_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
+    c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
+    return "", 200
+
+@ws_app.route('/BP2_ACTIF', methods=['POST'])
+def bp2_actif(request):
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_bp2} Complete")
+    c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
+    return "", 200
+
+@ws_app.route('/file_management')
+def file_management(request):
+    d_u.print_and_store_log("Show File management web page")
+    return w_f_m.serve_file_management_page(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/web_config', methods=['GET', 'POST'])
+def web_config(request):
+    response = w_c.serve_config_page(IP_ADDR, WS_PORT)
+    return response, 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/save_config', methods=['GET', 'POST'])
+def save_config(request):
+    return Response(
+        status_code=307,
+        headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/save_config"}
     )
-    cl.sendall(response.encode())
-    cl.close()
+
+@ws_app.route('/log.txt')
+def log_file(request):
+    try:
+        with open('/log.txt', 'r') as file:
+            return file.read(), 200, {"Content-Type": "text/plain"}
+    except FileNotFoundError:
+        return "Log file not found.", 404, {"Content-Type": "text/plain"}
+
+@ws_app.route('/livelog')
+def livelog(request):
+    return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/RESET_device')
+def reset_device(request):
+    d_u.print_and_store_log("Reset button pressed")
+    reset()
+
+@ws_app.route('/view')
+def view_file(request):
+    file_to_view = request.args.get('file')
+    if file_to_view == "config_var.py":
+        return "File not Allowed!", 404, {"Content-Type": "text/plain"}
+    elif d_u.file_exists("/" + file_to_view):
+        return w_f_m.create_view_file_page("/" + file_to_view), 200, {"Content-Type": "text/html"}
+    else:
+        return "File not found", 404, {"Content-Type": "text/plain"}
+
+@ws_app.route('/delete')
+def delete_file(request):
+    file_to_delete = request.args.get('file')
+    d_u.print_and_store_log(f"File {file_to_delete}")
+    try:
+        os.remove(file_to_delete)
+        d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
+        return Response(status_code=303, headers={"Location": "/file_management"})
+    except OSError as e:
+        return f"Error deleting file: {e}", 400, {"Content-Type": "text/plain"}
+
+@ws_app.route('/UPLOAD_server', methods=['GET', 'POST'])
+def upload_server(request):
+    response = w_u.serve_file_upload_page(IP_ADDR, WS_PORT)
+    return response, 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/upload_file', methods=['GET', 'POST'])
+def upload_file(request):
+    return Response(
+        status_code=307,
+        headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/upload"}
+    )
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
@@ -177,15 +173,35 @@ def start_WIFI_ap():
         ERR_WIFI = True
     return ap, ERR_WIFI
 
+def get_status():
+    door_state = door_sensor.value()
+    while True:
+        prev_door_state = door_state
+        door_state = door_sensor.value()
+        if prev_door_state == 0 and door_state == 1:
+            led.value(0)
+            e_l.internal_led_color(e_l.red)
+            statusd = "Status: FERME"
+            print(statusd)
+        elif prev_door_state == 1 and door_state == 0:
+            led.value(1)
+            e_l.internal_led_color(e_l.green)
+            statusd = "Status: OUVERT"
+            print(statusd)
+        utime.sleep(0.5)
+
 def main():
     """ The Main one ! """
     global door_state
     global statusd
-    sock = None
     global oled_d
     global IP_ADDR
     global PORT
+    PORT = 80
+    global WS_PORT
+    WS_PORT = 8080
     ap = None
+    statusd = ""
     # ERR_* are used to display LED color in case of...
     global ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
     ERR_SOCKET = False
@@ -194,21 +210,15 @@ def main():
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
 
+    # Start up info
+    info_start = "#############--- Guibo Control ---############# "
+    d_u.check_and_delete_if_too_big("/log.txt", 20)
+    d_u.print_and_store_log(info_start)
+    d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
     # Start up info
-    info_start = "Guibo Control"
-    print(info_start)
     if oled_d:
-        oled_d.text(info_start, 0, 0)
-        info_control = "Version 1.0" 
-        oled_d.text(info_control, 0, 10)
-        oled_d.text('https://github.c', 0, 20)
-        oled_d.text('om/aginies/domot', 0, 30)
-        oled_d.text('ique', 0, 40)
-        oled_d.text('ag@ginies.org', 0, 50)
-        oled_d.show()
-        utime.sleep(1)
-    if oled_d:
+        o_s.show_info_on_oled(info_start)
         oled_d.fill(0)
 
     if c_v.E_WIFI is False:
@@ -228,6 +238,13 @@ def main():
                 IP_ADDR = c_v.AP_IP[0]
             else:
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
+
+    _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
+    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT))
+    _thread.start_new_thread(oled_special_show, ())
+    _thread.start_new_thread(get_status, ())
+    #_thread.start_new_thread(m_r.rfid_do_access_control, ())
+
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
     print(f"Information sur {c_v.DOOR}:")
@@ -237,79 +254,39 @@ def main():
     elif door_state == 1:
         statusd = "Status: FERME"
         led.value(0)
-
     print(statusd)        
     o_s.oled_show_text_line(statusd, 10)
 
-    ports_to_try = [80, 81]
-    for port in ports_to_try:
-        if IP_ADDR and IP_ADDR != '0.0.0.0':
-            addr = socket.getaddrinfo(IP_ADDR, port)[0][-1]
-            sock = socket.socket()
-            try:
-                sock.bind(addr)
-                o_s.oled_show_text_line(f"Socket Ok: {port}", 20)
-                sock.listen(5)
-                sock.setblocking(False)
-                o_s.oled_show_text_line("Listening Ok", 30)
-                print(f'Listening on {addr}')
-                e_l.internal_led_blink(e_l.violet, e_l.led_off, 3, c_v.time_ok)
-                PORT = port
-                ERR_SOCKET = False
-                break  # Exit the loop if binding is successful
-            except OSError as err:
-                print(f"Failed to bind to port {port}: {err}")
-                o_s.oled_show_text_line(f"Socket :{port} NOK!", 20)
-                e_l.internal_led_blink(e_l.violet, e_l.led_off, 5, c_v.time_err)
-                ERR_SOCKET = True
-        else:
-            print('Problème Avec le WIFI')
-            o_s.oled_show_text_line("WIFI AP NOK!", 30)
-            ERR_WIFI = True
-            internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
-
     if oled_d is None:
         ERR_OLED = True
-
     error_vars = {
-        'Ouverture Socket': ERR_SOCKET,
-        'Ecran OLED': ERR_OLED,
+        'Openning Socket': ERR_SOCKET,
+        'OLED Screen': ERR_OLED,
         'Wifi': ERR_WIFI,
-        'Controle du relay': ERR_CTRL_RELAY,
-        'Connection Wifi': ERR_CON_WIFI
+        'Relay Control': ERR_CTRL_RELAY,
+        'Wifi Connection': ERR_CON_WIFI
     }
     if not any(error_vars.values()):
-        print("Système OK")
+        d_u.print_and_store_log("System OK")
         e_l.french_flag()
     else:
-        error_messages = [f"Erreur: {var_name}" for var_name, var_value in error_vars.items() if var_value]
-        print(", ".join(error_messages))
+        error_messages = [f"Error: {var_name}\n" for var_name, var_value in error_vars.items() if var_value]
+        d_u.print_and_store_log(", ".join(error_messages))
 
-    # We are ready
-    _thread.start_new_thread(m_r.rfid_do_access_control, ())
-    while True:
-        prev_door_state = door_state
-        door_state = door_sensor.value()
-        check_and_display_error()
+    check_and_display_error()
+    if IP_ADDR and IP_ADDR != '0.0.0.0':
+        try:
+            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT))
+        except Exception as err:
+            d_u.print_and_store_log(f"Server error: {err}")
+            ERR_SOCKET = True
+        finally:
+            asyncio.new_event_loop()
+    else:
+        d_u.print_and_store_log('Trouble with WIFI')
+        o_s.oled_show_text_line("WIFI AP NOK!", 40)
+        ERR_WIFI = True
+        e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
 
-        if prev_door_state == 0 and door_state == 1:
-            led.value(0)
-            e_l.internal_led_color(e_l.red)
-            statusd = "Status: FERME"
-            print(statusd)
-
-        elif prev_door_state == 1 and door_state == 0:
-            led.value(1)
-            e_l.internal_led_color(e_l.green)
-            statusd = "Status: OUVERT"
-            print(statusd)
-
-        oled_constant_show()
-
-        if sock:
-            handle_client_connection(sock)
-
-        utime.sleep(0.5)
-        
 if __name__ == "__main__":
     main()
