@@ -18,11 +18,11 @@ nom_close_b = "Ajustement Fermeture "
 I_LED_PIN = 48
 
 # ESP32-S3 CPU freq
-CPU_FREQ=160
+CPU_FREQ=240
 
 # Timing top open or close the curtain in seconds
-time_to_close = 6
-time_to_open = 10
+time_to_close = 156
+time_to_open = 168
 
 # CHOOSE AP OR EXISTING WIFI
 # E_WIFI is True you will use a existing Wifi
