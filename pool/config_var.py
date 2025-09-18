@@ -22,7 +22,7 @@ CPU_FREQ=240
 
 # Timing top open or close the curtain in seconds
 time_to_close = 156
-time_to_open = 168
+time_to_open = 166
 
 # CHOOSE AP OR EXISTING WIFI
 # E_WIFI is True you will use a existing Wifi
