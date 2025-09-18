@@ -94,7 +94,7 @@ def index(request):
 @ws_app.route('/BP1_ACTIF', methods=['POST'])
 def bp1_actif(request):
     d_u.print_and_store_log(f"ACTION: {c_v.nom_bp1} Complete")
-    c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
+    c_r.thread_do_job_crtl_relay("BP1", 1, 0.5)
     return "", 200
 
 @ws_app.route('/status', methods=['GET'])
