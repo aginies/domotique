@@ -51,18 +51,6 @@ def create_html_response():
             color: #444;
             margin-bottom: 30px;
         }}
-        .small-button {{
-            padding: 24px 40px;
-            font-size: 12px;
-            background-color: #007BFF;
-            border: none;
-            color: white;
-            border-radius: 5px;
-            text-decoration: none;
-            cursor: pointer;
-            margin: 10px;
-            transition: background-color 0.3s;
-        }}  
         .button-small:hover {{
             background-color: #138496; /* Darker blue on hover */
         }}
@@ -381,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {{
                 }} else if (data.BP1_active) {{
                     disableAllButtons(true, ['BP2', 'CLOSE_B', 'OPEN_B']);
                 }} else if (data.BP2_active) {{
-                    disableAllButtons(true, ['BP1'], 'CLOSE_B', 'OPEN_B');
+                    disableAllButtons(true, ['BP1', 'CLOSE_B', 'OPEN_B']);
                 }}
             }}
         }} catch (error) {{
