@@ -78,7 +78,7 @@ def setup_access_point():
             o_s.oled_show_text_line(info, 10)
             utime.sleep(2)
 
-        d_u.print_and_store_log(f'WIFI Access Point created with IP adress: {ap.ifconfig()[0]}')
+        d_u.print_and_store_log(f'WIFI Access Point: {c_v.AP_SSID}, IP adress: {ap.ifconfig()[0]}')
         e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
         return ap
     except OSError as err:
