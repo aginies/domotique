@@ -1,15 +1,16 @@
-# antoine@ginies.org
-# GPL3
-import socket
-import network
-import utime
-import _thread
+""" 
+ antoine@ginies.org
+ GPL3
+"""
+import time
+import os
 import asyncio
-import gc
+import _thread
+import ujson
 from machine import Pin, reset
-import esp32 # get MCU temp
+import ure as re
 
-# Internal libs
+# Internal lib
 import web_command as w_cmd
 import domo_utils as d_u
 import esp32_led as e_l
@@ -17,17 +18,15 @@ import oled_ssd1306 as o_s
 import config_var as c_v
 import domo_wifi as d_w
 import web_config as w_c
-import save_config as s_c
-import manage_rfid as m_r
 import web_files_management as w_f_m
 import web_log as w_l
 import crtl_relay as c_r
+import domo_socket_server as d_s_s
+import manage_rfid as m_r
 import domo_microdot as d_m
 import web_upload as w_u
-import domo_socket_server as d_s_s
 from domo_microdot import ws_app
 from microdot import Microdot, send_file, Response
-
 
 # LIST OF CONNECTED CLIENTS
 connected_ips = set()
@@ -42,7 +41,6 @@ prev_door_state = door_state
 
 # SEtting OFF RELAY for BP1 and BP2
 c_r.relay1.off()
-c_r.relay2.off()
 
 def check_and_display_error():
     """ In case of error display quickly the error color """
@@ -60,8 +58,27 @@ def check_and_display_error():
 def oled_special_show():
     """ Data always displayed """
     if oled_d:
-        oled_d.text(statusd, 0, 50)
-        oled_d.show()
+        while True:
+            if d_u.file_exists('/IN_PROGRESS'):
+                if d_u.file_exists('/BP1'):
+                    oled_d.text("En Ouverture", 0, 50)
+                elif d_u.file_exists('/BP2'):
+                    oled_d.text("En Fermeture", 0, 50)
+                else:
+                    oled_d.text("", 0, 50)
+            if d_u.file_exists('/EMERGENCY_STOP'):
+                oled_d.text("", 0, 50)
+                oled_d.text("REBOOT NEEDED!", 0, 50)
+            oled_d.show()
+            time.sleep(1)
+
+def start_WIFI_ap():
+    ap = d_w.setup_access_point()
+    if ap:
+        ERR_WIFI = False
+    else:
+        ERR_WIFI = True
+    return ap, ERR_WIFI
 
 @ws_app.before_request
 def log_client_ip(request):
@@ -80,23 +97,17 @@ def bp1_actif(request):
     c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
     return "", 200
 
-@ws_app.route('/OPEN_B_ACTIF', methods=['POST'])
-def open_b_actif(request):
-    d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
-    c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
-    return "", 200
-
-@ws_app.route('/CLOSE_B_ACTIF', methods=['POST'])
-def close_b_actif(request):
-    d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
-    c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
-    return "", 200
-
-@ws_app.route('/BP2_ACTIF', methods=['POST'])
-def bp2_actif(request):
-    d_u.print_and_store_log(f"ACTION: {c_v.nom_bp2} Complete")
-    c_r.thread_do_job_crtl_relay("BP2", 2, c_v.time_to_close)
-    return "", 200
+@ws_app.route('/status', methods=['GET'])
+def status(request):
+    bp1_active = d_u.file_exists('/BP1')
+    bp2_active = d_u.file_exists('/BP2')
+    in_progress = d_u.file_exists('/IN_PROGRESS')
+    status_data = {
+        "BP1_active": bp1_active,
+        "BP2_active": bp2_active,
+        "In_progress": in_progress
+    }
+    return ujson.dumps(status_data), 200, {"Content-Type": "application/json"}
 
 @ws_app.route('/file_management')
 def file_management(request):
@@ -126,6 +137,16 @@ def log_file(request):
 @ws_app.route('/livelog')
 def livelog(request):
     return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/get_log_action')
+def get_log_action(request):
+    response, status_code, headers = w_l.serve_log_file(4, "ACTION")
+    return response, status_code, headers
+
+@ws_app.route('/get_log_upload')
+def get_log_upload(request):
+    response, status_code, headers = w_l.serve_log_file(10, "UPLOAD")
+    return response, status_code, headers
 
 @ws_app.route('/RESET_device')
 def reset_device(request):
@@ -165,20 +186,12 @@ def upload_file(request):
         headers={"Location": f"http://{IP_ADDR}:{WS_PORT}/upload"}
     )
 
-def start_WIFI_ap():
-    ap = d_w.setup_access_point()
-    if ap:
-        ERR_WIFI = False
-    else:
-        ERR_WIFI = True
-    return ap, ERR_WIFI
-
 def get_status():
     door_state = door_sensor.value()
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
-        if prev_door_state == 0 and door_state == 1:
+        if prev_door_state == 0 and door_state == 1:	
             led.value(0)
             e_l.internal_led_color(e_l.red)
             statusd = "Status: FERME"
@@ -188,12 +201,12 @@ def get_status():
             e_l.internal_led_color(e_l.green)
             statusd = "Status: OUVERT"
             print(statusd)
-        utime.sleep(0.5)
+        time.sleep(0.5)
 
 def main():
     """ The Main one ! """
-    global door_state
     global statusd
+    global door_state
     global oled_d
     global IP_ADDR
     global PORT
@@ -201,23 +214,22 @@ def main():
     global WS_PORT
     WS_PORT = 8080
     ap = None
-    statusd = ""
     # ERR_* are used to display LED color in case of...
-    global ERR_SOCKET, ERR_OLED, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI
+    global ERR_SOCKET, ERR_WIFI, ERR_CTRL_RELAY, ERR_CON_WIFI, ERR_OLED
     ERR_SOCKET = False
     ERR_OLED = False
     ERR_WIFI = False
     ERR_CTRL_RELAY = False
     ERR_CON_WIFI = False
-
     # Start up info
     info_start = "#############--- Guibo Control ---############# "
     d_u.check_and_delete_if_too_big("/log.txt", 20)
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
-    # Start up info
-    if oled_d:
+    if oled_d is None:
+        ERR_OLED = True
+    else:
         o_s.show_info_on_oled(info_start)
         oled_d.fill(0)
 
@@ -228,9 +240,13 @@ def main():
         result_con_wifi = d_w.connect_to_wifi()
         if result_con_wifi['success']:
             IP_ADDR = result_con_wifi['ip_address']
+            d_u.set_time_with_ntp()
+            d_u.print_and_store_log(d_u.show_rtc_date())
+            hour, minute, second = d_u.show_rtc_time()
+            d_u.print_and_store_log(f"{hour}:{minute}:{second}")
         else:
             # Failed to connect to External Wifi
-            # STarting the Wifi AP
+            # Starting the Wifi AP
             ERR_CON_WIFI = True
             ap, ERR_WIFI = start_WIFI_ap()
             if ap:
@@ -254,11 +270,9 @@ def main():
     elif door_state == 1:
         statusd = "Status: FERME"
         led.value(0)
-    print(statusd)        
+    print(statusd)
     o_s.oled_show_text_line(statusd, 10)
 
-    if oled_d is None:
-        ERR_OLED = True
     error_vars = {
         'Openning Socket': ERR_SOCKET,
         'OLED Screen': ERR_OLED,
@@ -270,10 +284,13 @@ def main():
         d_u.print_and_store_log("System OK")
         e_l.french_flag()
     else:
-        error_messages = [f"Error: {var_name}\n" for var_name, var_value in error_vars.items() if var_value]
+        error_messages = [f"Error: {var_name}" for var_name, var_value in error_vars.items() if var_value]
         d_u.print_and_store_log(", ".join(error_messages))
 
+    # We are ready
     check_and_display_error()
+
+    o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
         try:
             asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT))
