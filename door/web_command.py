@@ -116,6 +116,7 @@ def create_html_response():
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
             <a href="/file_management" target="_blank" class="config-button">Explorer</a>
             <a href="mailto:antoine@ginies.org" class="config-button">Antoine</a>
+        </div>
     </div>
 </body>
     <script>
