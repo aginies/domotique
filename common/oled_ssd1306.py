@@ -21,7 +21,7 @@ def show_info_on_oled(info_start):
     """ Show some info on oled"""
     if oled_d:
         oled_d.text(info_start, 0, 0)
-        info_control = "Version 1.0"
+        info_control = "guibo.com"
         oled_d.text(info_control, 0, 10)
         oled_d.text('https://github.c', 0, 20)
         oled_d.text('om/aginies/domot', 0, 30)
