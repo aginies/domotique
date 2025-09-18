@@ -6,6 +6,19 @@ import config_var
 with open('/VERSION', 'r') as file:
    version = file.read().strip()
 
+
+def format_list_for_html(data):
+    """Formats a list or list-of-lists into a compact hex string for an HTML value."""
+    if not isinstance(data, list):
+        return str(data)
+    if data and isinstance(data[0], list):
+        return '[' + ', '.join([f'[{", ".join(hex(i) for i in inner)}]' for inner in data]) + ']'
+    else:
+        return f'[{", ".join(hex(i) for i in data)}]'
+
+formatted_card_key = format_list_for_html(config_var.CARD_KEY)
+formatted_auth_cards = format_list_for_html(config_var.AUTHORIZED_CARDS)
+
 # Load existing configuration
 config = {
     "DOOR": config_var.DOOR,
@@ -29,8 +42,8 @@ config = {
     "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
     "CPU_FREQ": config_var.CPU_FREQ,
     "VERSION": version,
-    "CARD_KEY": config_var.CARD_KEY,
-    "AUTHORIZED_CARDS": config_var.AUTHORIZED_CARDS,
+    "CARD_KEY": formatted_card_key,
+    "AUTHORIZED_CARDS": formatted_auth_cards,
 }
 
 def serve_config_page(IP_ADDR, WS_PORT):

@@ -7,7 +7,9 @@ import domo_utils as d_u
 def save_config(new_config):
     with open('config_var.py', 'w') as f:
         for key, value in new_config.items():
-            if isinstance(value, str):
+            if key in ('AUTHORIZED_CARDS', 'CARD_KEY'):
+                f.write(f'{key} = {value}\n')
+            elif isinstance(value, str):
                 f.write(f'{key} = "{value.replace('"', '\\"')}"\n')
             elif isinstance(value, bool):
                 f.write(f'{key} = {value}\n')
@@ -46,7 +48,7 @@ def save_configuration(request, IP_ADDR):
     for key, value in parsed_items.items():
         if key in w_c.config:
             current_config_value = w_c.config.get(key)
-            
+
             if isinstance(current_config_value, int):
                 try:
                     w_c.config[key] = int(value)
