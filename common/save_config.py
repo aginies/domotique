@@ -17,32 +17,7 @@ def save_config(new_config):
                 f.write(f'{key} = {repr(value)}\n')
             f.flush()
 
-def url_decode(s):
-    """ Try to do url decode as micropython doesnt have urlib parse..."""
-    result = []
-    i = 0
-    while i < len(s):
-        if s[i] == '%':
-            if i + 2 < len(s):
-                hex_val = s[i+1:i+3]
-                try:
-                    result.append(chr(int(hex_val, 16)))
-                    i += 3
-                except ValueError:
-                    result.append(s[i])
-                    i += 1
-            else:
-                result.append(s[i])
-                i += 1
-        elif s[i] == '+':
-            result.append(' ')
-            i += 1
-        else:
-            result.append(s[i])
-            i += 1
-    return ''.join(result)
-
-def save_configuration(request):
+def save_configuration(request, IP_ADDR):
     """ Save the configuration file """
     decoded_request = request.decode('utf-8')
     body_start = decoded_request.find('\r\n\r\n')
@@ -55,9 +30,9 @@ def save_configuration(request):
     for pair in pairs:
         if '=' in pair:
             key, value = pair.split('=', 1) # Split only on the first '='
-            parsed_items[url_decode(key)] = url_decode(value)
+            parsed_items[d_u.url_decode(key)] = d_u.url_decode(value)
         else:
-            parsed_items[url_decode(pair)] = ""
+            parsed_items[d_u.url_decode(pair)] = ""
 
     for key, value in parsed_items.items():
         # Specific handling for CPU_FREQ from the dropdown
@@ -89,11 +64,12 @@ def save_configuration(request):
                 w_c.config[key] = value
 
     save_config(w_c.config)
-    redirect_url = "/"
+    redirect_url = (f"http://{IP_ADDR}/web_config")
     response_headers = [
         "HTTP/1.1 303 See Other",
         f"Location: {redirect_url}",
         "Connection: close",
         "",
     ]
-    return "\r\n".join(response_headers)
+    response = "\r\n".join(response_headers)
+    return response
