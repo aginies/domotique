@@ -76,9 +76,10 @@ def handle_upload_simple(cl, socket, request, IP_ADDR):
         if filename == "update.bin":
             d_u.manage_update("/update.bin", "/update")
 
+        d_u.print_and_store_log(f"UPLOAD: Will redirect to http://{IP_ADDR}/UPLOAD_server")
         redirect_url = (f"http://{IP_ADDR}/UPLOAD_server")
         response_headers = [
-            "HTTP/1.1 303 See Other",
+            "HTTP/1.1 307 See Other",
             f"Location: {redirect_url}",
             "Connection: close",
             "",
