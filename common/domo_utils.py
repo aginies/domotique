@@ -65,8 +65,8 @@ def check_and_delete_if_too_big(filepath, max_size_kb):
             os.remove(filepath)
             print_and_store_log(f"Successfully deleted: {filepath}")
             return True
-        except OSError as e:
-            print_and_store_log(f"Error deleting file {filepath}: {e}")
+        except OSError as err:
+            print_and_store_log(f"Error deleting file {filepath}: {err}")
             return False
     else:
         print_and_store_log(f"File size ({current_size_bytes} bytes) is within the limit of {max_size_kb}Kb. No action needed.")
@@ -84,7 +84,7 @@ def delete_files_with_extension(target_dir, extension):
                 print_and_store_log(f"Deleting {file_path}...")
                 os.remove(file_path)
             except OSError as err:
-                print_and_store_log(f"Error deleting {item}: {e}")
+                print_and_store_log(f"Error deleting {item}: {err}")
     print_and_store_log(f"Finished deleting {extension} files.")
 
 def store_log(text_data, filename="/log.txt"):
