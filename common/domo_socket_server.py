@@ -39,12 +39,13 @@ def start_socket_server(ipaddr, port):
             try:
                 method, path, _ = first_line.decode('utf-8').split()
                 d_u.print_and_store_log(f"SERVER: Received {method} request for {path}")
-                if method == 'POST' and path.startswith('/upload/'):
+                if method == 'POST' and path.startswith('/upload'):
                     response = w_u.handle_upload_simple(cl, soc, request, ipaddr)
                 if method == 'POST' and path.startswith('/save_config'):
-                    response = s_c.save_configuration(request)
+                    response = s_c.save_configuration(request, ipaddr)
                 elif method == 'GET' and path == '/':
-                    response = w_u.serve_file_upload_page(ipaddr, port)
+                    response = w_u.serve_file_upload_page(ipaddr, 80)
+                    #response = "HTTP/1.1 202 OK\r\n\r\n"
                 else:
                     response = "HTTP/1.1 404 Not Found\r\n\r\nNot Found"
 
