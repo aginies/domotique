@@ -20,6 +20,7 @@ import domo_wifi as d_w
 import web_config as w_c
 import web_files_management as w_f_m
 import web_log as w_l
+import web_rfid as w_r
 import crtl_relay as c_r
 import domo_socket_server as d_s_s
 import manage_rfid as m_r
@@ -133,6 +134,10 @@ def log_file(request):
             return file.read(), 200, {"Content-Type": "text/plain"}
     except FileNotFoundError:
         return "Log file not found.", 404, {"Content-Type": "text/plain"}
+
+@ws_app.route('/new_card')
+def new_card(request):
+    return w_r.create_enroll_card_page(), 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/livelog')
 def livelog(request):
