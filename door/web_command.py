@@ -130,6 +130,7 @@ def create_html_response():
             <a href="/web_config" target="_blank" class="config-button">Configurer</a>
             <a href="/livelog" target="_blank" class="config-button">Voir les Log</a>
             <a href="/file_management" target="_blank" class="config-button">Explorer</a>
+            <a href="/new_card" target="_blank" class="config-button">Cartes</a>
             <a href="mailto:antoine@ginies.org" class="config-button">Antoine</a>
         </div>
     </div>
