@@ -29,6 +29,8 @@ config = {
     "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
     "CPU_FREQ": config_var.CPU_FREQ,
     "VERSION": version,
+    "CARD_KEY": config_var.CARD_KEY,
+    "AUTHORIZED_CARDS": config_var.AUTHORIZED_CARDS,
 }
 
 def serve_config_page(IP_ADDR, WS_PORT):
@@ -61,7 +63,7 @@ def serve_config_page(IP_ADDR, WS_PORT):
         h1, h2 {{
             color: #2c3e50;
         }}
-        .container {{
+        .form-container {{
             background-color: #ffffff;
             padding: 30px;
             border-radius: 12px;
@@ -69,7 +71,13 @@ def serve_config_page(IP_ADDR, WS_PORT):
             max-width: 600px;
             margin: 20px auto;
         }}
-        .group {{
+        .button-group {{
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 20px;
+        }}
+        .form-group {{
             margin-bottom: 20px;
         }}
         label {{
@@ -135,13 +143,29 @@ def serve_config_page(IP_ADDR, WS_PORT):
         .cancel-button:hover {{
             background-color: #7f8c8d;      
         }}
+        .reset-button {{
+            background-color: #e74c3c;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }}
+        .reset-button:hover {{
+            background-color: #c0392b;
+        }}
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="form-container">
         <h1>Configuration pour {DOOR} ({VERSION})</h1>
         <form id="configForm" action="/save_config" method="POST">
-            <div class="group">
+            <div class="form-group">
                 <label for="DOOR">Nom Général</label>
                 <input type="text" id="DOOR" name="DOOR" value="{DOOR}">
             </div>
@@ -153,28 +177,39 @@ def serve_config_page(IP_ADDR, WS_PORT):
                 </div>
             </div>
             <div class="section">
+                <h2>Card management</h2>
+                <div class="form-group">
+                    <label for="CARD_KEY">Card Key:</label>
+                    <input type="text" id="CARD_KEY" name="CARD_KEY" value="{CARD_KEY}">
+                </div>
+                <div class="form-group">
+                    <label for="AUTHORIZED_CARDS">Authorized Cards:</label>
+                    <input type="text" id="AUTHORIZED_CARDS" name="AUTHORIZED_CARDS" value="{AUTHORIZED_CARDS}">
+                </div>
+            </div>
+            <div class="section">
                 <h2>WIFI</h2>
-                <div class="group">
+                <div class="form-group">
                     <label for="E_WIFI">Utiliser un réseau existant (True ou False):</label>
                     <input type="text" id="E_WIFI" name="E_WIFI" value="{E_WIFI}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="WIFI_SSID">WiFi SSID:</label>
                     <input type="text" id="WIFI_SSID" name="WIFI_SSID" value="{WIFI_SSID}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="WIFI_PASSWORD">WiFi Password:</label>
                     <input type="password" id="WIFI_PASSWORD" name="WIFI_PASSWORD" value="{WIFI_PASSWORD}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="AP_SSID">AP SSID:</label>
                     <input type="text" id="AP_SSID" name="AP_SSID" value="{AP_SSID}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="AP_PASSWORD">AP Password:</label>
                     <input type="password" id="AP_PASSWORD" name="AP_PASSWORD" value="{AP_PASSWORD}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="AP_CHANNEL">AP Channel:</label>
                     <input type="number" id="AP_CHANNEL" name="AP_CHANNEL" value="{AP_CHANNEL}">
                 </div>
@@ -192,31 +227,31 @@ def serve_config_page(IP_ADDR, WS_PORT):
                         <option value="240" {selected_240}>240 MHz</option>
                     </select>
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="I_LED_PIN">Internal LED Pin:</label>
                     <input type="number" id="I_LED_PIN" name="I_LED_PIN" value="{I_LED_PIN}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="LED_PIN">External LED Pin:</label>
                     <input type="number" id="LED_PIN" name="LED_PIN" value="{LED_PIN}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="DOOR_SENSOR_PIN">Door Sensor Pin:</label>
                     <input type="number" id="DOOR_SENSOR_PIN" name="DOOR_SENSOR_PIN" value="{DOOR_SENSOR_PIN}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="RELAY1_PIN">Relay 1 Pin:</label>
                     <input type="number" id="RELAY1_PIN" name="RELAY1_PIN" value="{RELAY1_PIN}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="RELAY2_PIN">Relay 2 Pin:</label>
                     <input type="number" id="RELAY2_PIN" name="RELAY2_PIN" value="{RELAY2_PIN}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="time_ok">LED OK Time (seconds):</label>
                     <input type="number" step="0.1" id="time_ok" name="time_ok" value="{time_ok}">
                 </div>
-                <div class="group">
+                <div class="form-group">
                     <label for="time_err">LED Error Time (seconds):</label>
                     <input type="number" step="0.1" id="time_err" name="time_err" value="{time_err}">
                 </div>
@@ -233,14 +268,17 @@ def serve_config_page(IP_ADDR, WS_PORT):
             <form id="configForm" action="/save_config" method="POST" enctype="multipart/form-data">
                 <input type="submit" value="Save">
             </form>
-        <a href="/" class="cancel-button">Cancel</a>
-    </form> 
+            <a href="/" class="cancel-button">Cancel</a>
+            <a href="/RESET_device" target="_blank" class="button reset-button" onclick="return confirm('Are you sure you want to reset the device? This will cause
+ a reboot.')">Reset Device</a>
+        </div>
+        <form>
     </div>
     <script>
         const configForm = document.getElementById('configForm');
         const configServerUrl = 'http://{IP_ADDR}:{WS_PORT}';
         configForm.addEventListener('change', () => {{
-            configForm.action = configServerUrl + '/save_config/';
+            configForm.action = configServerUrl + '/save_config';
             console.log('Form action set to:', configForm.action);
         }};
     </script>
