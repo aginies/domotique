@@ -1,7 +1,6 @@
 # antoine@ginies.org
 # GPL3
 
-from collections import deque
 import config_var as c_v
 import utime
 
