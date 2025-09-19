@@ -3,9 +3,6 @@
 
 import time
 import domo_utils as d_u
-import uos
-import json
-import socket
 
 def handle_upload_simple(cl, socket, request, IP_ADDR):
     try:
