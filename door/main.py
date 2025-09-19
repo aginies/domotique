@@ -7,7 +7,7 @@ import os
 import asyncio
 import _thread
 import ujson
-from machine import Pin, reset
+from machine import Pin, Timer
 import ure as re
 
 # Internal lib
@@ -20,6 +20,7 @@ import domo_wifi as d_w
 import web_config as w_c
 import web_files_management as w_f_m
 import web_log as w_l
+import web_rfid as w_r
 import crtl_relay as c_r
 import domo_socket_server as d_s_s
 import manage_rfid as m_r
@@ -134,11 +135,6 @@ def log_file(request):
     except FileNotFoundError:
         return "Log file not found.", 404, {"Content-Type": "text/plain"}
 
-@ws_app.route('/new_card')
-def new_card(request):
-    _thread.start_new_thread(m_r.enroll_new_card, ())
-    return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
-
 @ws_app.route('/livelog')
 def livelog(request):
     return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
@@ -146,6 +142,11 @@ def livelog(request):
 @ws_app.route('/get_log_action')
 def get_log_action(request):
     response, status_code, headers = w_l.serve_log_file(4, "ACTION")
+    return response, status_code, headers
+
+@ws_app.route('/get_log_rfid')
+def get_log_rfid(request):
+    response, status_code, headers = w_l.serve_log_file(10, "RFID")
     return response, status_code, headers
 
 @ws_app.route('/get_log_upload')
@@ -156,7 +157,8 @@ def get_log_upload(request):
 @ws_app.route('/RESET_device')
 def reset_device(request):
     d_u.print_and_store_log("Reset button pressed")
-    reset()
+    _thread.start_new_thread(d_u.perform_reset, ())
+    return "<htm><H1>Reset done!</H1><h2>Close this page</h2></html>", 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/view')
 def view_file(request):
@@ -182,6 +184,12 @@ def delete_file(request):
 @ws_app.route('/UPLOAD_server', methods=['GET', 'POST'])
 def upload_server(request):
     response = w_u.serve_file_upload_page(IP_ADDR, WS_PORT)
+    return response, 200, {"Content-Type": "text/html"}
+
+@ws_app.route('/RFID_manage', methods=['GET', 'POST'])
+def rfid_manage(request):
+    _thread.start_new_thread(m_r.enroll_new_card, ())
+    response = w_r.serve_rfid_page(IP_ADDR, WS_PORT)
     return response, 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/upload_file', methods=['GET', 'POST'])
@@ -261,21 +269,20 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
     _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
-    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT))
     _thread.start_new_thread(oled_special_show, ())
     _thread.start_new_thread(get_status, ())
     #_thread.start_new_thread(m_r.rfid_do_access_control, ())
 
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
-    print(f"Information sur {c_v.DOOR}:")
+    d_u.print_and_store_log(f"Information {c_v.DOOR}:")
     if door_state == 0:
         statusd = "Status: OUVERT"
         led.value(1)
     elif door_state == 1:
         statusd = "Status: FERME"
         led.value(0)
-    print(statusd)
+    d_u.print_and_store_log(statusd)
     o_s.oled_show_text_line(statusd, 10)
 
     error_vars = {
@@ -294,6 +301,7 @@ def main():
 
     # We are ready
     check_and_display_error()
+    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
 
     o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
