@@ -51,26 +51,34 @@ def oled_show_text_line(text, line):
         oled_d.show()
         utime.sleep(0.5)
 
-def oled_constant_show(IP_ADDR, PORT):
-    """ Data always displayed """
-    if oled_d:
-        mcu_t = esp32.mcu_temperature()
-        temp_mcu = "Temp ESP32: " + str(mcu_t) + "C"
-        oled_d.fill(0)
-        SSID = c_v.AP_SSID
-        if c_v.E_WIFI is True:
-            if ERR_CON_WIFI is False:
+def oled_constant_show(IP_ADDR, PORT, error_vars):
+    """ Data always displayed, using the error_vars dictionary for status. """
+    while True:
+        if oled_d:
+            oled_d.fill(0)
+            SSID = c_v.AP_SSID
+            if c_v.E_WIFI and not error_vars['Wifi Connection']:
                 SSID = c_v.WIFI_SSID
-        if ERR_SOCKET is False and ERR_WIFI is False:
-            oled_d.text("Wifi SSID:", 0, 0)
-            oled_d.text(SSID, 0, 10)
-            oled_d.text("Wifi IP AP:", 0, 20)
-            INFO_W = IP_ADDR +":"+ str(PORT)
-            oled_d.text(INFO_W, 0, 30)
-        else:
-            oled_d.text(" ! Warning !", 0, 0)
-            oled_d.text(" Wifi Pas OK", 0, 10)
-            oled_d.text(" ! ** !", 0, 20)
-            oled_d.text("Mode degrade!", 0, 30)
-        oled_d.text(temp_mcu, 0, 40)
-        time.sleep(1)
+            if not error_vars['Wifi'] and not error_vars['Openning Socket']:
+                oled_d.text("Wifi SSID:", 0, 0)
+                oled_d.text(SSID, 0, 10)
+                oled_d.text("Wifi IP AP:", 0, 20)
+                INFO_W = f"{IP_ADDR}:{PORT}"
+                oled_d.text(INFO_W, 0, 30)
+            else:
+                oled_d.text(" ! Warning !", 0, 0)
+                error_cause = "Network Error"
+                if error_vars['Wifi']:
+                    error_cause = "Wifi Init"
+                elif error_vars['Openning Socket']:
+                    error_cause = "Socket Open"
+
+                oled_d.text(f"Cause: {error_cause}", 0, 10)
+                oled_d.text(" ! ** !", 0, 20)
+                oled_d.text("Mode degrade!", 0, 30)
+
+            mcu_t = esp32.mcu_temperature()
+            temp_mcu = f"Temp ESP32: {mcu_t}C"
+            oled_d.text(temp_mcu, 0, 40)
+            oled_d.show()
+            utime.sleep(1)
