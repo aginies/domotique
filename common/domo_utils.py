@@ -12,6 +12,11 @@ import uhashlib
 import urequests
 import utime
 
+def perform_reset():
+    """ reset the device """
+    utime.sleep(1.5)
+    machine.reset()
+
 def sanitize_filename(filename):
     return filename.split('/')[-1].split('\\')[-1]
 
