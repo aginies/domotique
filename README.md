@@ -5,8 +5,10 @@ Control a Door
 * Get info on the status of a door, **open** or **closed** using an external **LED** (optionnal)
 * Control using a Wifi Access Point the door with a button on a **web server**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
-* Use RFID to open the door (optionnal)
-* **Configure** using a web interface
+* Use RFID to open the door (optionnal), and program new card
+* **Live log** available
+* **Files management**
+* **Configuration** using a web interface
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/portail_web.jpg)
 
@@ -18,7 +20,7 @@ Control a Pool shutter
 * Control using a **Wifi Access Point** the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
 * **Live log** available
-* **Configure** the timing and other parameters through a web interface
+* **Configuration** the timing and other parameters through a web interface
 * **Files management**
 * **Udpate** support an **update.bin** file
 
@@ -52,18 +54,38 @@ Common Features:
 
 # Hardware
 
-* Develop on an ESP32-S3-WROOM N16R8. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED. Be sure to build **micropython** for N16R8 to use all **storage** and **SPIRAM** available.
-* LED (5V) to get status of the door
-* Resistance to protect the LED (~270ohms)
-* 5V or 3.3V relay
-* 0.96" Oled I2C screen or any other I2C. Adapt to your hardware
-* MC-38 magnetic captor, or any other similar stuff
-* hcsr-04 ultra sonic sensor (parking_detection)
+* Develop on an **ESP32-S3-WROOM** N16R8. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED. Be sure to build **micropython** for N16R8 to use all **storage** and **SPIRAM** available. See above in external link.
+* Use **LED** (5V) to get status of the door
+* a **Resistance** to protect the LED (~270ohms)
+* 5V or 3.3V **relay** to control motors
+* 0.96" **Oled I2C** screen or any other I2C. Adapt to your hardware
+* **MC-38 magnetic** captor, or any other similar stuff to get status of the door
+* **hcsr-04 ultra sonic** sensor (parking_detection)
+* **mfrc522 RFID** for card auth
 
 # Installation
 
-* copy the full directory into **/** directory of the ESP32
-* copy needed libs from **common** directory to **/** directory of the ESP32
+``make
+Creating a temp_door_domotic dir and copy files in
+# Create a temporary directory to stage the files
+'../common/domo_wifi.py' -> 'temp_door_domotic/domo_wifi.py'
+'../common/save_config.py' -> 'temp_door_domotic/save_config.py'
+'../common/domo_microdot.py' -> 'temp_door_domotic/domo_microdot.py'
+'../common/domo_utils.py' -> 'temp_door_domotic/domo_utils.py'
+'../common/oled_ssd1306.py' -> 'temp_door_domotic/oled_ssd1306.py'
+....
+Packed 23 files into update.bin (SHA256 included).
+update.bin created successfully.
+``
+
+The **update.bin** can be used to update a running version, just upload the file
+on the ESP32, it will keep all existing configuration if compatible.
+
+``make copy 
+Starting upload to /dev/ttyACM0
+    - Copying temp_door_domotic/domo_wifi.py to /
+...
+``
 
 # Debug LED color
 
@@ -76,7 +98,7 @@ Color information
 * white: Connect to an existing Wifi
 * green: Init the OLED screen
 * pink: Control the 5V Relay
-* purple: Open a Socket (port 80)
+* purple: Open a Socket
 
 After start, in case of error, the assigned color will blink.
 
@@ -91,7 +113,7 @@ Optionnal:
 
 # Devel
 
-Any contribution is welcome. I am currently expermienting and testing lot of domotics stuff.
+Any contribution is welcome. I am currently experimenting and testing lot of domotics stuff.
 
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/devel.jpg)
 
