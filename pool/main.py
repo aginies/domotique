@@ -195,7 +195,7 @@ def get_log_upload(request):
 def reset_device(request):
     d_u.print_and_store_log("Reset button pressed")
     _thread.start_new_thread(d_u.perform_reset, ())
-    return "<htm><H1>Reset done!</H1></html>", 200, {"Content-Type": "text/html"}
+    return "<htm><H1>Reset done!</H1><h2>Close this page</h2></html>", 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/view')
 def view_file(request):
