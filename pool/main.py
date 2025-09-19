@@ -297,7 +297,6 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
     _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
-    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT))
     _thread.start_new_thread(oled_special_show, ())
 
     error_vars = {
@@ -316,6 +315,7 @@ def main():
 
     # We are ready
     check_and_display_error()
+    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
 
     o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
