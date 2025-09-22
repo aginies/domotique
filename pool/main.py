@@ -7,8 +7,8 @@ import os
 import asyncio
 import _thread
 import ujson
+import sys
 from machine import Pin, reset
-import ure as re
 
 # Internal lib
 import web_command as w_cmd
@@ -159,6 +159,9 @@ def file_management(request):
 
 @ws_app.route('/web_config', methods=['GET', 'POST'])
 def web_config(request):
+    if 'config_var' in sys.modules:
+        del sys.modules['config_var']
+    import config_var as c_v
     response = w_c.serve_config_page(IP_ADDR, WS_PORT)
     return response, 200, {"Content-Type": "text/html"}
 
