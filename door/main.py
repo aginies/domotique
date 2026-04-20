@@ -117,7 +117,8 @@ def web_config(request):
     if 'config_var' in sys.modules:
         del sys.modules['config_var']
     import config_var as c_v
-    response = w_c.serve_config_page(IP_ADDR, WS_PORT)
+    reboot_needed = request.args.get('reboot_needed') == '1'
+    response = w_c.serve_config_page(IP_ADDR, WS_PORT, reboot_needed)
     return response, 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/save_config', methods=['GET', 'POST'])

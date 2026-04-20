@@ -20,37 +20,43 @@ def format_list_for_html(data):
     else:
         return f'[{", ".join(hex(i) for i in data)}]'
 
-formatted_card_key = format_list_for_html(config_var.CARD_KEY)
-formatted_auth_cards = format_list_for_html(config_var.AUTHORIZED_CARDS)
+def get_config():
+    import sys
+    if 'config_var' in sys.modules:
+        del sys.modules['config_var']
+    import config_var
+    formatted_card_key = format_list_for_html(config_var.CARD_KEY)
+    formatted_auth_cards = format_list_for_html(config_var.AUTHORIZED_CARDS)
 
-# Load existing configuration
-config = {
-    "DOOR": config_var.DOOR,
-    "nom_bp1": config_var.nom_bp1,
-    "E_WIFI": config_var.E_WIFI,
-    "WIFI_SSID": config_var.WIFI_SSID,
-    "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
-    "AP_SSID": config_var.AP_SSID,
-    "AP_PASSWORD": config_var.AP_PASSWORD,
-    "AP_HIDDEN_SSID": config_var.AP_HIDDEN_SSID,
-    "AP_CHANNEL": config_var.AP_CHANNEL,
-    "AP_IP": config_var.AP_IP,
-    "I_LED_PIN": config_var.I_LED_PIN,
-    "LED_PIN": config_var.LED_PIN,
-    "DOOR_SENSOR_PIN": config_var.DOOR_SENSOR_PIN,
-    "RELAY1_PIN": config_var.RELAY1_PIN,
-    "RELAY2_PIN": config_var.RELAY2_PIN,
-    "time_ok": config_var.time_ok,
-    "time_err": config_var.time_err,
-    "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
-    "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
-    "CPU_FREQ": config_var.CPU_FREQ,
-    "VERSION": version,
-    "CARD_KEY": formatted_card_key,
-    "AUTHORIZED_CARDS": formatted_auth_cards,
-}
+    # Load existing configuration
+    return {
+        "DOOR": config_var.DOOR,
+        "nom_bp1": config_var.nom_bp1,
+        "E_WIFI": config_var.E_WIFI,
+        "WIFI_SSID": config_var.WIFI_SSID,
+        "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
+        "AP_SSID": config_var.AP_SSID,
+        "AP_PASSWORD": config_var.AP_PASSWORD,
+        "AP_HIDDEN_SSID": config_var.AP_HIDDEN_SSID,
+        "AP_CHANNEL": config_var.AP_CHANNEL,
+        "AP_IP": config_var.AP_IP,
+        "I_LED_PIN": config_var.I_LED_PIN,
+        "LED_PIN": config_var.LED_PIN,
+        "DOOR_SENSOR_PIN": config_var.DOOR_SENSOR_PIN,
+        "RELAY1_PIN": config_var.RELAY1_PIN,
+        "RELAY2_PIN": config_var.RELAY2_PIN,
+        "time_ok": config_var.time_ok,
+        "time_err": config_var.time_err,
+        "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
+        "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
+        "CPU_FREQ": config_var.CPU_FREQ,
+        "VERSION": version,
+        "CARD_KEY": formatted_card_key,
+        "AUTHORIZED_CARDS": formatted_auth_cards,
+    }
 
-def serve_config_page(IP_ADDR, WS_PORT):
+def serve_config_page(IP_ADDR, WS_PORT, reboot_needed=False):
+    config = get_config()
     selected_options = {
         'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
         'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
@@ -61,6 +67,7 @@ def serve_config_page(IP_ADDR, WS_PORT):
     net_config = {
         'IP_ADDR': IP_ADDR,
         'WS_PORT': WS_PORT,
+        'reboot_banner': '<div class="reboot-banner">Configuration saved. Reboot required for changes to take effect.</div>' if reboot_needed else '',
     }
     html = """
 <!DOCTYPE html>
@@ -176,11 +183,21 @@ def serve_config_page(IP_ADDR, WS_PORT):
         .reset-button:hover {{
             background-color: #c0392b;
         }}
+        .reboot-banner {{
+            background-color: #f39c12;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+        }}
     </style>
 </head>
 <body>
     <div class="form-container">
         <h1>Configuration pour {DOOR} ({VERSION})</h1>
+        {reboot_banner}
         <form id="configForm" action="/save_config" method="POST">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>
