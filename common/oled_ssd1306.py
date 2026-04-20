@@ -79,7 +79,9 @@ def oled_constant_show(IP_ADDR, PORT, error_vars):
 
             # Display progress / status
             if d_u.file_exists(paths.IN_PROGRESS_FLAG):
-                if d_u.file_exists(paths.RELAY_BP1_FLAG):
+                if d_u.file_exists(paths.AJUSTEMENT_FLAG):
+                    oled_d.text("Ajustement", 0, 50)
+                elif d_u.file_exists(paths.RELAY_BP1_FLAG):
                     oled_d.text("En Ouverture", 0, 50)
                 elif d_u.file_exists(paths.RELAY_BP2_FLAG):
                     oled_d.text("En Fermeture", 0, 50)

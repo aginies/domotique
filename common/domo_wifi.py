@@ -21,40 +21,74 @@ def deactivate_active_interfaces():
         ap_if.active(False)
 
 def connect_to_wifi():
-    """ Connect to an existing network """
+    """ Connect to an existing network with improved stability and feedback """
     deactivate_active_interfaces()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.active():
         sta_if.active(True)
     
-    max_attempts = 5
-    attempt = 0
+    # Set hostname to the name of the device (useful for router identification)
+    try:
+        hostname = c_v.DOOR.replace(" ", "_")
+        if hasattr(network, 'hostname'):
+            network.hostname(hostname)
+        else:
+            sta_if.config(dhcp_hostname=hostname)
+    except Exception:
+        pass
+
+    # Disable power management to avoid latency/disconnection issues
+    try:
+        sta_if.config(pm=network.WLAN.PM_NONE)
+    except Exception:
+        pass
+
+    d_u.print_and_store_log(f"Connecting to WiFi SSID: {c_v.WIFI_SSID}...")
     try:
         sta_if.connect(c_v.WIFI_SSID, c_v.WIFI_PASSWORD)
     except OSError as err:
-        d_u.print_and_store_log(err)
+        d_u.print_and_store_log(f"WiFi Connect Error: {err}")
+        return {'success': False, 'ERR_WIFI': True}
+
+    max_attempts = 20
+    attempt = 0
     while not sta_if.isconnected() and attempt < max_attempts:
         attempt += 1
-        info = "Connect Wifi "+str(attempt)+"/"+str(max_attempts)
-        d_u.print_and_store_log(info)
-        if o_s.oled_d:
-            o_s.oled_d.fill(0)
-            o_s.oled_show_text_line(info, 10)
-        utime.sleep(3)
+        if attempt % 3 == 0:
+            info = f"Connect Wifi {attempt//3}/6"
+            d_u.print_and_store_log(info)
+            if o_s.oled_d:
+                o_s.oled_show_text_line(info, 10)
+        
+        # Check specific statuses if available
+        status = sta_if.status()
+        if status == network.STAT_WRONG_PASSWORD:
+            d_u.print_and_store_log("WiFi Error: Wrong Password")
+            break
+        elif status == network.STAT_NO_AP_FOUND:
+            # We keep trying as the AP might be starting up
+            pass
+            
+        utime.sleep(1)
+
     if o_s.oled_d:
         o_s.oled_d.fill(1)
+        o_s.oled_d.show()
+        utime.sleep(0.1)
         o_s.oled_d.fill(0)
+        o_s.oled_d.show()
+
     if sta_if.isconnected():
-        d_u.print_and_store_log(f"Connection to WiFi {c_v.WIFI_SSID} OK")
-        d_u.print_and_store_log(f"Network Config: {sta_if.ifconfig()}")
+        config = sta_if.ifconfig()
+        d_u.print_and_store_log(f"Connected to {c_v.WIFI_SSID}!")
+        d_u.print_and_store_log(f"IP: {config[0]}, Gateway: {config[2]}")
         e_l.internal_led_blink(e_l.white, e_l.led_off, 3, c_v.time_ok)
-        return {'success': True, 'ip_address': sta_if.ifconfig()[0]}
+        return {'success': True, 'ip_address': config[0]}
     else:
-        d_u.print_and_store_log("Connection to WiFi NOK!")
+        d_u.print_and_store_log("WiFi Connection Failed!")
         e_l.internal_led_blink(e_l.white, e_l.led_off, 5, c_v.time_err)
-        ERR_WIFI = True
-        d_u.print_and_store_log("Forcing AP Wifi")
-        return {'success': False, 'ERR_WIFI': ERR_WIFI}
+        d_u.print_and_store_log("Falling back to Access Point mode")
+        return {'success': False, 'ERR_WIFI': True}
     
 def setup_access_point():
     """ AP configuration """
@@ -69,21 +103,27 @@ def setup_access_point():
                   password=c_v.AP_PASSWORD,
                   hidden=c_v.AP_HIDDEN_SSID,
                   channel=c_v.AP_CHANNEL)
+        
+        d_u.print_and_store_log(f"Starting Access Point: {c_v.AP_SSID}")
+        
         max_attempts = 5
         attempt = 0
         while not ap.active() and attempt < max_attempts:
             attempt += 1
-            info = "Trying AP Wifi "+str(attempt)+"/"+str(max_attempts)
+            info = f"Starting AP {attempt}/{max_attempts}"
             d_u.print_and_store_log(info)
-            o_s.oled_d.fill(0)
-            o_s.oled_show_text_line(info, 10)
-            utime.sleep(2)
+            if o_s.oled_d:
+                o_s.oled_show_text_line(info, 10)
+            utime.sleep(1)
 
-        d_u.print_and_store_log(f'WIFI Access Point: {c_v.AP_SSID}, IP adress: {ap.ifconfig()[0]}')
-        e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
+        if ap.active():
+            d_u.print_and_store_log(f'WIFI Access Point active! IP: {ap.ifconfig()[0]}')
+            e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
         return ap
     except OSError as err:
+        d_u.print_and_store_log(f"AP Setup Error: {err}")
         e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
+        return None
 
 async def wifi_watchdog(check_interval_s=30, error_vars=None):
     """ Periodically verify STA connectivity and reconnect with exponential backoff. """

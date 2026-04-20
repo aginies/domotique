@@ -21,7 +21,7 @@ relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 def emergency_manage_files():
     """ manage files if emergency clicked """
     # If stopped by emergency, ensure files are cleared
-    TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.RELAY_BP2_FLAG, paths.IN_PROGRESS_FLAG]
+    TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.RELAY_BP2_FLAG, paths.AJUSTEMENT_FLAG, paths.IN_PROGRESS_FLAG]
     for doit in TO_REMOVE:
         if d_u.file_exists(doit):
             try:
@@ -71,6 +71,11 @@ def ctrl_relay(which_one, duration):
                 os.remove(paths.IN_PROGRESS_FLAG)
             except OSError:
                 pass
+        if d_u.file_exists(paths.AJUSTEMENT_FLAG):
+            try:
+                os.remove(paths.AJUSTEMENT_FLAG)
+            except OSError:
+                pass
         lock.release()
         gc.collect()
 
@@ -97,16 +102,24 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
             try:
                 with open(paths.RELAY_BP1_FLAG, 'w') as file:
                     file.write('This file was created by clicking BP1.')
-                os.remove(paths.RELAY_BP2_FLAG)
+                for f in [paths.RELAY_BP2_FLAG, paths.AJUSTEMENT_FLAG]:
+                    if d_u.file_exists(f): os.remove(f)
             except OSError:
                 pass # BP2 might not exist
         elif B_text == "BP2":
             try:
                 with open(paths.RELAY_BP2_FLAG, 'w') as file:
                     file.write('This file was created by clicking BP2.')
-                os.remove(paths.RELAY_BP1_FLAG)
+                for f in [paths.RELAY_BP1_FLAG, paths.AJUSTEMENT_FLAG]:
+                    if d_u.file_exists(f): os.remove(f)
             except OSError:
                 pass # BP1 might not exist
+        elif B_text in ("OPEN_B", "CLOSE_B"):
+            try:
+                with open(paths.AJUSTEMENT_FLAG, 'w') as file:
+                    file.write('Ajustement in progress')
+            except OSError:
+                pass
 
         _thread.start_new_thread(ctrl_relay, (relay_nb, duration))
         response_content = B_text + " activated"

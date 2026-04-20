@@ -40,7 +40,7 @@ c_r.relay2.off()
 
 # At start we can only Open the Pool
 # remove all previous ERROR
-TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.EMERGENCY_STOP_FLAG, paths.IN_PROGRESS_FLAG]
+TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.AJUSTEMENT_FLAG, paths.EMERGENCY_STOP_FLAG, paths.IN_PROGRESS_FLAG]
 for doit in TO_REMOVE:
     try:
         os.remove(doit)
