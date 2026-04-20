@@ -1,23 +1,31 @@
 # antoine@ginies.org
 # GPL3
 
+import os
 import web_config as w_c
 import domo_utils as d_u
+import paths
 
 def save_config(new_config):
-    with open('config_var.py', 'w') as f:
+    tmp_path = paths.CONFIG_FILE + '.tmp'
+    with open(tmp_path, 'w') as f:
         for key, value in new_config.items():
             if key in ('AUTHORIZED_CARDS', 'CARD_KEY'):
                 f.write(f'{key} = {value}\n')
             elif isinstance(value, str):
-                f.write(f'{key} = "{value.replace('"', '\\"')}"\n')
+                escaped_value = value.replace('"', '\\"')
+                f.write(f'{key} = "{escaped_value}"\n')
             elif isinstance(value, bool):
                 f.write(f'{key} = {value}\n')
             elif isinstance(value, (int, float)):
                 f.write(f'{key} = {value}\n')
             else:
                 f.write(f'{key} = {repr(value)}\n')
-            f.flush()
+    try:
+        os.remove(paths.CONFIG_FILE)
+    except OSError:
+        pass
+    os.rename(tmp_path, paths.CONFIG_FILE)
 
 def save_configuration(request, IP_ADDR):
     """ Save the configuration file """

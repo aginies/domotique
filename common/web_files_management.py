@@ -14,6 +14,15 @@ def serve_file_management_page():
     for file in files:
         try:
             file_stats = os.stat(file)
+            file_mod_timestamp = file_stats[8]
+            file_size_bytes = file_stats[6]
+            file_mod_date = time.localtime(file_mod_timestamp)
+            formatted_date = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
+                file_mod_date[0], file_mod_date[1], file_mod_date[2],
+                file_mod_date[3], file_mod_date[4], file_mod_date[5]
+            )
+            file_size_kb = round(file_size_bytes / 1024, 2)
+            
             if file == "config_var.py":
                 file_table_rows += f"""
                 <tr>
@@ -25,15 +34,6 @@ def serve_file_management_page():
                 </tr>
                 """
             elif file_stats[0] & 0o170000 == 0o100000:
-                file_mod_timestamp = file_stats[8]
-                file_size_bytes = file_stats[6]
-                file_mod_date = time.localtime(file_mod_timestamp)
-                formatted_date = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
-                    file_mod_date[0], file_mod_date[1], file_mod_date[2],
-                    file_mod_date[3], file_mod_date[4], file_mod_date[5]
-                )
-                file_size_kb = round(file_size_bytes / 1024, 2)
-
                 file_table_rows += f"""
                 <tr>
                     <td>{file}</td>

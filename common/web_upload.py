@@ -73,13 +73,13 @@ def handle_upload_simple(cl, socket, request, IP_ADDR):
         if filename == "update.bin":
             d_u.manage_update("/update.bin", "/update")
 
-        d_u.print_and_store_log(f"UPLOAD: Will redirect to http://{IP_ADDR}/UPLOAD_server")
-        redirect_url = (f"http://{IP_ADDR}/UPLOAD_server")
+        d_u.print_and_store_log(f"UPLOAD: Process finished for {filename}")
         response_headers = [
-            "HTTP/1.1 307 See Other",
-            f"Location: {redirect_url}",
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/plain",
             "Connection: close",
             "",
+            "Upload Complete",
         ]
         response = "\r\n".join(response_headers)
         return response
@@ -163,32 +163,77 @@ def serve_file_upload_page(IP_ADDR, WS_PORT):
         .upload-button:hover {{
             background-color: #0056b3;
         }}
+        #progressInfo {{
+            margin-top: 10px;
+            font-weight: bold;
+            color: #007bff;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Upload a file</h1>
         <div class="upload-form">
-            <form id="uploadForm" action="/upload_file" method="POST" enctype="multipart/form-data">
+            <form id="uploadForm">
                 <input type="file" id="fileInput" name="file_content">
-                <input type="submit" value="Upload">
+                <input type="submit" id="submitBtn" value="Upload">
             </form>
+            <div id="progressInfo"></div>
         </div>
         <div class="container">
             <h2>Log.txt (slow update)</h2>
-            <pre id="log-display"></pre>
+            <pre id="log-display" class="log-display"></pre>
+        </div>
+        <div style="margin-top: 20px;">
+            <a href="/" class="button" style="background-color: #6c757d;">Back to Control</a>
         </div>
     </div>
     <script>
         const uploadForm = document.getElementById('uploadForm');
         const fileInput = document.getElementById('fileInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const progressInfo = document.getElementById('progressInfo');
+        const logDisplay = document.getElementById('log-display');
         const uploadServerUrl = 'http://{IP_ADDR}:{WS_PORT}';
-        fileInput.addEventListener('change', () => {{
+
+        uploadForm.addEventListener('submit', async (e) => {{
+            e.preventDefault();
             const file = fileInput.files[0];
-            if (file) {{
-                const encodedFilename = encodeURIComponent(file.name);
-                uploadForm.action = uploadServerUrl + '/upload/' + encodedFilename;
-                console.log('Form action set to:', uploadForm.action);
+            if (!file) {{
+                alert('Please select a file first.');
+                return;
+            }}
+
+            const encodedFilename = encodeURIComponent(file.name);
+            const targetUrl = uploadServerUrl + '/upload/' + encodedFilename;
+
+            submitBtn.disabled = true;
+            submitBtn.value = 'Uploading...';
+            progressInfo.textContent = 'Upload in progress, please wait and check logs below...';
+
+            const formData = new FormData();
+            formData.append('file_content', file);
+
+            try {{
+                const response = await fetch(targetUrl, {{
+                    method: 'POST',
+                    body: formData
+                }});
+
+                if (response.ok) {{
+                    const result = await response.text();
+                    progressInfo.textContent = 'Upload finished: ' + result;
+                    submitBtn.value = 'Upload Again';
+                }} else {{
+                    progressInfo.textContent = 'Upload failed with status: ' + response.status;
+                    submitBtn.value = 'Retry Upload';
+                }}
+            }} catch (error) {{
+                console.error('Error:', error);
+                progressInfo.textContent = 'Error during upload: ' + error.message;
+                submitBtn.value = 'Retry Upload';
+            }} finally {{
+                submitBtn.disabled = false;
             }}
         }});
 
@@ -199,10 +244,11 @@ def serve_file_upload_page(IP_ADDR, WS_PORT):
                     throw new Error(`HTTP error! Status: ${{response.status}}`);
                 }}
                 const logData = await response.text();
-                document.getElementById('log-display').textContent = logData || 'No logs found.';
+                logDisplay.textContent = logData || 'No logs found.';
+                // Auto-scroll to bottom
+                logDisplay.scrollTop = logDisplay.scrollHeight;
             }} catch (error) {{
                 console.error('Failed to fetch logs:', error);
-                document.getElementById('log-display').textContent = 'Failed to load logs.';
             }}
         }};
         getLogs()

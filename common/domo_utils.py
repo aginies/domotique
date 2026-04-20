@@ -3,6 +3,7 @@
 
 """ Domotique Utils """
 import os
+import sys
 import gc
 import struct
 import micropython
@@ -11,6 +12,9 @@ import ntptime
 import uhashlib
 import urequests
 import utime
+import paths
+
+LOG_MAX_BYTES = 40 * 1024
 
 def perform_reset():
     """ reset the device """
@@ -77,8 +81,6 @@ def check_and_delete_if_too_big(filepath, max_size_kb):
         print_and_store_log(f"File size ({current_size_bytes} bytes) is within the limit of {max_size_kb}Kb. No action needed.")
         return False
 
-    dir_contents = os.listdir(target_dir)
-
 def delete_files_with_extension(target_dir, extension):
     """ delete files with extensions """
     dir_contents = os.listdir(target_dir)
@@ -92,8 +94,28 @@ def delete_files_with_extension(target_dir, extension):
                 print_and_store_log(f"Error deleting {item}: {err}")
     print_and_store_log(f"Finished deleting {extension} files.")
 
-def store_log(text_data, filename="/log.txt"):
+def _rotate_log_if_needed(filename, max_bytes):
+    """ Rename filename to filename + '.1' once it exceeds max_bytes. Keeps one generation. """
+    try:
+        size = os.stat(filename)[6]
+    except OSError:
+        return
+    if size < max_bytes:
+        return
+    rotated = filename + ".1"
+    try:
+        os.remove(rotated)
+    except OSError:
+        pass
+    try:
+        os.rename(filename, rotated)
+    except OSError as err:
+        # Use bare print: print_and_store_log would re-enter store_log.
+        print(f"log rotation failed for {filename}: {err}")
+
+def store_log(text_data, filename=paths.LOG_FILE):
     """ Stores a text string as a new line in a log file. """
+    _rotate_log_if_needed(filename, LOG_MAX_BYTES)
     with open(filename, "a") as file:
         file.write(text_data + "\n")
 
@@ -101,7 +123,7 @@ def print_and_store_log(text_data):
     """ print log and store them """
     hour, minute, second = show_rtc_time()
     current_date = show_rtc_date()
-    current_time = str(hour)+":"+str(minute)+":"+str(second)
+    current_time = f"{hour:02d}:{minute:02d}:{second:02d}"
     data_to_print = current_date+" "+current_time+": "+text_data
     print(data_to_print)
     store_log(data_to_print)
@@ -117,7 +139,7 @@ def file_exists(file_path):
 def copy_file(source_path, dest_path):
     """ Copies a file from source_path to dest_path """
     try:
-        if not os.stat(source_path)[6] > 0:
+        if not file_exists(source_path):
             print_and_store_log(f"Source file not found: {source_path}")
             return False
 
@@ -170,8 +192,8 @@ def check_config_files(old_config_path, new_config_path):
     if not missing_vars:
         print_and_store_log("UPDATE: The configuration files have the same variables.")
         print_and_store_log("UPDATE: Restoring old config file.")
-        copy_file("/config_var.py.bck", "/config_var.py")
-        os.remove("/config_var.py.bck")
+        copy_file(paths.CONFIG_BACKUP, paths.CONFIG_FILE)
+        os.remove(paths.CONFIG_BACKUP)
     else:
         print_and_store_log("UPDATE WARNING: The old configuration file is missing the following variables:")
         for var in sorted(list(missing_vars)):
@@ -183,23 +205,37 @@ def manage_update(filename, output_dir):
     """ Function to extract filename bin """
     print_and_store_log("UPDATE: Update detected! Extracting")
     try:
-        unpack_files_with_sha256(filename, output_dir)
+        if not unpack_files_with_sha256(filename, output_dir):
+            print_and_store_log("UPDATE: Aborting update due to integrity failure.")
+            return
+
         print_and_store_log(f"UPDATE: Successfully extracted {filename}")
         os.remove(filename)
         print_and_store_log(f"UPDATE: Deleted {filename} after extraction")
         print_and_store_log("UPDATE: Backing file config_var.py")
-        if file_exists("/config_var.py"):
-            copy_file("/config_var.py", "/config_var.py.bck")
-        files_to_copy = os.listdir(output_dir)
+        if file_exists(paths.CONFIG_FILE):
+            copy_file(paths.CONFIG_FILE, paths.CONFIG_BACKUP)
 
+        files_to_copy = os.listdir(output_dir)
         for f_to_copy in files_to_copy:
-            print_and_store_log(f"{output_dir}/{f_to_copy}, {f_to_copy}")
-            copy_file(output_dir+"/"+f_to_copy, "/"+f_to_copy)
-        check_config_files("config_var.py.bck", "config_var.py")
+            src = output_dir + "/" + f_to_copy
+            dst = "/" + f_to_copy
+            print_and_store_log(f"UPDATE: Copying {src} to {dst}")
+            copy_file(src, dst)
+
+        check_config_files(paths.CONFIG_BACKUP, paths.CONFIG_FILE)
         print_and_store_log("UPDATE WARNING: Update done, please reboot/restart the system")
+        
         for f_to_delete in files_to_copy:
-            os.remove(output_dir+"/"+f_to_delete)
-        os.remove(output_dir)
+            try:
+                os.remove(output_dir + "/" + f_to_delete)
+            except OSError:
+                pass
+        try:
+            os.rmdir(output_dir)
+        except OSError:
+            pass
+            
     except Exception as err:
         print_and_store_log(f"Failed to extract {filename}: {err}")
 
@@ -210,18 +246,20 @@ def bytes_to_hex(bytes_data):
 def unpack_files_with_sha256(packed_bin, output_dir):
     """
     Unpacks files and verifies SHA256 (MicroPython-compatible).
+    Returns True if successful, False otherwise.
     """
     try:
+        if not file_exists(output_dir):
             os.mkdir(output_dir)
     except OSError:
-            pass
+        pass
 
     try:
         with open(packed_bin, 'rb') as in_file:
             packed_data = in_file.read()
     except OSError as err:
         print_and_store_log(f"UPDATE: Failed to read {packed_bin}: {err}")
-        return
+        return False
 
     # Split data and hash
     data = packed_data[:-32]
@@ -239,8 +277,9 @@ def unpack_files_with_sha256(packed_bin, output_dir):
     if actual_hash == expected_hash:
         print_and_store_log("UPDATE: sha256sum is Ok!")
     else:
-        #raise ValueError("SHA256 checksum mismatch! The file may be corrupted.")
         print_and_store_log("UPDATE WARNING: SHA256 checksum mismatch! The file may be corrupted.")
+        return False
+
     # Unpack files
     offset = 0
     while offset < len(data):
@@ -265,6 +304,7 @@ def unpack_files_with_sha256(packed_bin, output_dir):
             continue
 
     print_and_store_log(f"UPDATE: Unpacked files to {output_dir} (SHA256 verified).")
+    return True
 
 def set_time_with_ntp():
     try:

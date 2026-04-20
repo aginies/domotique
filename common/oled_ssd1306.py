@@ -9,6 +9,7 @@ import esp32
 
 import config_var as c_v
 import domo_utils as d_u
+import paths
 
 # ESP32 Pin assignment OLED
 i2c = SoftI2C(scl=Pin(c_v.OLED_SCL_PIN), sda=Pin(c_v.OLED_SDA_PIN))
@@ -40,8 +41,7 @@ def initialize_oled():
         return oled_d
     except OSError as err:
         d_u.print_and_store_log(f"Ecran OLED NOK: {err}")
-        ERR_OLED = True
-        pass
+        return None
 
 def oled_show_text_line(text, line):
     """ Show a text on a specific line """
@@ -76,6 +76,16 @@ def oled_constant_show(IP_ADDR, PORT, error_vars):
                 oled_d.text(f"Cause: {error_cause}", 0, 10)
                 oled_d.text(" ! ** !", 0, 20)
                 oled_d.text("Mode degrade!", 0, 30)
+
+            # Display progress / status
+            if d_u.file_exists(paths.IN_PROGRESS_FLAG):
+                if d_u.file_exists(paths.RELAY_BP1_FLAG):
+                    oled_d.text("En Ouverture", 0, 50)
+                elif d_u.file_exists(paths.RELAY_BP2_FLAG):
+                    oled_d.text("En Fermeture", 0, 50)
+
+            if d_u.file_exists(paths.EMERGENCY_STOP_FLAG):
+                oled_d.text("REBOOT NEEDED!", 0, 50)
 
             mcu_t = esp32.mcu_temperature()
             temp_mcu = f"Temp ESP32: {mcu_t}C"

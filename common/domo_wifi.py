@@ -5,6 +5,7 @@
 
 import network
 import utime
+import asyncio
 import oled_ssd1306 as o_s
 import esp32_led as e_l
 import config_var as c_v
@@ -83,3 +84,38 @@ def setup_access_point():
         return ap
     except OSError as err:
         e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
+
+async def wifi_watchdog(check_interval_s=30, error_vars=None):
+    """ Periodically verify STA connectivity and reconnect with exponential backoff. """
+    if not c_v.E_WIFI:
+        return
+    sta_if = network.WLAN(network.STA_IF)
+    backoff = check_interval_s
+    while True:
+        await asyncio.sleep(backoff)
+        try:
+            if sta_if.isconnected():
+                backoff = check_interval_s
+                continue
+            d_u.print_and_store_log("WIFI watchdog: connection dropped, reconnecting")
+            if error_vars is not None:
+                error_vars['Wifi Connection'] = True
+            try:
+                sta_if.active(True)
+                sta_if.connect(c_v.WIFI_SSID, c_v.WIFI_PASSWORD)
+            except OSError as err:
+                d_u.print_and_store_log(f"WIFI watchdog: connect error: {err}")
+            for _ in range(10):
+                await asyncio.sleep(1)
+                if sta_if.isconnected():
+                    break
+            if sta_if.isconnected():
+                d_u.print_and_store_log(f"WIFI watchdog: reconnected, IP {sta_if.ifconfig()[0]}")
+                if error_vars is not None:
+                    error_vars['Wifi Connection'] = False
+                backoff = check_interval_s
+            else:
+                d_u.print_and_store_log("WIFI watchdog: still disconnected, backing off")
+                backoff = min(backoff * 2, 300)
+        except Exception as err:
+            d_u.print_and_store_log(f"WIFI watchdog error: {err}")

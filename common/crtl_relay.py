@@ -8,6 +8,7 @@ import gc
 from machine import Pin
 import domo_utils as d_u
 import config_var as c_v
+import paths
 
 lock = _thread.allocate_lock()
 
@@ -20,60 +21,61 @@ relay2 = Pin(c_v.RELAY2_PIN, Pin.OUT, drive=Pin.DRIVE_3)
 def emergency_manage_files():
     """ manage files if emergency clicked """
     # If stopped by emergency, ensure files are cleared
-    TO_REMOVE = ["/BP1", "/BP2", "/IN_PROGRESS"]
+    TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.RELAY_BP2_FLAG, paths.IN_PROGRESS_FLAG]
     for doit in TO_REMOVE:
-        try:
-            os.remove(doit)
-        except OSError:
-            pass
+        if d_u.file_exists(doit):
+            try:
+                os.remove(doit)
+            except OSError:
+                pass
 
 def ctrl_relay(which_one, duration):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
+    relay = relay1 if which_one == 1 else relay2
 
-    if which_one == 1:
-        relay = relay1
-    else:
-        relay = relay2
-
-    with open('/IN_PROGRESS', 'w') as file:
-        file.write('This file was created by clicking BP1 or BP2.')
     try:
-        # internal_led_blink(pink, led_off, 3, c_v.time_ok) # Keep if non-blocking
+        with open(paths.IN_PROGRESS_FLAG, 'w') as file:
+            file.write('This file was created by clicking BP1 or BP2.')
+        
         relay.on()
         d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
         start_time = utime.time()
         last_print_time = start_time
+        
         while utime.time() - start_time < duration:
             if check_stop_relay():
                 d_u.print_and_store_log(f"Stop requested for Relay {which_one} (duration left: {duration - (utime.time() - start_time):.1f}s).")
                 relay.off()
                 emergency_manage_files()
-                break
-            else:
-                current_time = utime.time()
-                if current_time - last_print_time >= 5:
-                    elapsed_time = current_time - start_time
-                    d_u.print_and_store_log(f"Relay {which_one} has been ON for {elapsed_time:.1f} seconds. ({duration - elapsed_time:.1f}s remaining).")
-                    last_print_time = current_time
+                return # Early return, finally will still run
+
+            current_time = utime.time()
+            if current_time - last_print_time >= 5:
+                elapsed_time = current_time - start_time
+                d_u.print_and_store_log(f"Relay {which_one} has been ON for {elapsed_time:.1f} seconds. ({duration - elapsed_time:.1f}s remaining).")
+                last_print_time = current_time
             utime.sleep_ms(100)
 
         if relay.value() == 1:
             d_u.print_and_store_log(f"Switching Relay {which_one} as Off")
             relay.off()
 
-        lock.release()
-        gc.collect()
-
     except Exception as err:
         d_u.print_and_store_log(f"Error in ctrl_relay({which_one}): {err}")
         relay1.off()
         relay2.off()
-        # internal_led_blink(pink, led_off, 5, c_v.time_err)
-        ERR_CTRL_RELAY = True
+    finally:
+        if d_u.file_exists(paths.IN_PROGRESS_FLAG):
+            try:
+                os.remove(paths.IN_PROGRESS_FLAG)
+            except OSError:
+                pass
+        lock.release()
+        gc.collect()
 
 def check_stop_relay():
-    test = d_u.file_exists("/EMERGENCY_STOP")
+    test = d_u.file_exists(paths.EMERGENCY_STOP_FLAG)
     return test
 
 def ctrl_relay_off():
@@ -93,16 +95,16 @@ def thread_do_job_crtl_relay(B_text, relay_nb, duration):
         last_ctrl_relay_time = current_time
         if B_text == "BP1":
             try:
-                with open("/BP1", 'w') as file:
-                    file.write(f'This file was created by clicking BP1.')
-                os.remove("/BP2")
+                with open(paths.RELAY_BP1_FLAG, 'w') as file:
+                    file.write('This file was created by clicking BP1.')
+                os.remove(paths.RELAY_BP2_FLAG)
             except OSError:
                 pass # BP2 might not exist
         elif B_text == "BP2":
             try:
-                with open("/BP2", 'w') as file:
-                    file.write(f'This file was created by clicking BP2.')
-                os.remove("/BP1")
+                with open(paths.RELAY_BP2_FLAG, 'w') as file:
+                    file.write('This file was created by clicking BP2.')
+                os.remove(paths.RELAY_BP1_FLAG)
             except OSError:
                 pass # BP1 might not exist
 
