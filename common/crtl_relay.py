@@ -28,6 +28,10 @@ def emergency_manage_files():
                 os.remove(doit)
             except OSError:
                 pass
+    # If Shelly is enabled, force it OFF immediately
+    if getattr(c_v, 'CONTROL_SHELLY', False):
+        import shelly_control
+        shelly_control.set_power(c_v.SHELLY_IP, False)
 
 def ctrl_relay(which_one, duration):
     """ relay 1 or 2, now non-blocking """
@@ -38,6 +42,15 @@ def ctrl_relay(which_one, duration):
         with open(paths.IN_PROGRESS_FLAG, 'w') as file:
             file.write('This file was created by clicking BP1 or BP2.')
         
+        # Power ON Shelly if enabled
+        if getattr(c_v, 'CONTROL_SHELLY', False):
+            import shelly_control
+            d_u.print_and_store_log("Switching Shelly ON before relay")
+            if not shelly_control.set_power(c_v.SHELLY_IP, True):
+                d_u.print_and_store_log("ABORT: Shelly connection failed, skipping motor relay.")
+                return
+            utime.sleep(1)
+
         relay.on()
         d_u.print_and_store_log(f"Relay {which_one} ON for {duration} seconds.")
         start_time = utime.time()
@@ -60,6 +73,14 @@ def ctrl_relay(which_one, duration):
         if relay.value() == 1:
             d_u.print_and_store_log(f"Switching Relay {which_one} as Off")
             relay.off()
+            
+            # Power OFF Shelly if enabled, after a short delay
+            if getattr(c_v, 'CONTROL_SHELLY', False):
+                import shelly_control
+                wait_sec = getattr(c_v, 'DELAY_SHELLY', 3)
+                d_u.print_and_store_log(f"Waiting {wait_sec}s before switching Shelly OFF")
+                utime.sleep(wait_sec)
+                shelly_control.set_power(c_v.SHELLY_IP, False)
 
     except Exception as err:
         d_u.print_and_store_log(f"Error in ctrl_relay({which_one}): {err}")

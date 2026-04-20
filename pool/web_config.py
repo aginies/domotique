@@ -39,6 +39,9 @@ def serve_config_page(IP_ADDR, WS_PORT):
         "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
         "PIN_CODE": config_var.PIN_CODE,
         "CPU_FREQ": config_var.CPU_FREQ,
+        "CONTROL_SHELLY": getattr(config_var, 'CONTROL_SHELLY', False),
+        "SHELLY_IP": getattr(config_var, 'SHELLY_IP', ""),
+        "DELAY_SHELLY": getattr(config_var, 'DELAY_SHELLY', 3),
         "VERSION": version,
     }
     selected_options = {
@@ -51,6 +54,8 @@ def serve_config_page(IP_ADDR, WS_PORT):
     wifi_config = {
         'external_wifi_yes': 'True' if config_var.E_WIFI is True else '',
         'external_wifi_no': 'False' if config_var.E_WIFI is False else '',
+        'shelly_yes': 'True' if getattr(config_var, 'CONTROL_SHELLY', False) is True else '',
+        'shelly_no': 'False' if getattr(config_var, 'CONTROL_SHELLY', False) is False else '',
         'IP_ADDR': IP_ADDR,
         'WS_PORT': WS_PORT,
     }
@@ -251,6 +256,25 @@ def serve_config_page(IP_ADDR, WS_PORT):
                 <div class="form-group">
                     <label for="AP_CHANNEL">AP Channel:</label>
                     <input type="number" id="AP_CHANNEL" name="AP_CHANNEL" value="{AP_CHANNEL}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Shelly Control</h2>
+                <div class="form-group">
+                    <label for="CONTROL_SHELLY">Activer Shelly (Pilotage Motor):</label>
+                    <select id="CONTROL_SHELLY" name="CONTROL_SHELLY">
+                        <option value="True" {shelly_yes}>True</option>
+                        <option value="False" {shelly_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="SHELLY_IP">Shelly IP:</label>
+                    <input type="text" id="SHELLY_IP" name="SHELLY_IP" value="{SHELLY_IP}">
+                </div>
+                <div class="form-group">
+                    <label for="DELAY_SHELLY">Délai extinction Shelly (secondes):</label>
+                    <input type="number" id="DELAY_SHELLY" name="DELAY_SHELLY" value="{DELAY_SHELLY}">
                 </div>
             </div>
 

@@ -58,5 +58,10 @@ RELAY2_PIN = 17
 time_ok = 0.1
 time_err = 0.3
 
+# Shelly config
+CONTROL_SHELLY = False
+SHELLY_IP = "192.168.1.100"
+DELAY_SHELLY = 3
+
 # PIN CODE TO CLOSE
 PIN_CODE = 1234
