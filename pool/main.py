@@ -179,7 +179,7 @@ def livelog(request):
 
 @ws_app.route('/get_log_action')
 def get_log_action(request):
-    response, status_code, headers = w_l.serve_log_file(4, "ACTION")
+    response, status_code, headers = w_l.serve_log_file(10, ["ACTION", "Shelly", "ABORT", "Relay"])
     return response, status_code, headers
 
 @ws_app.route('/get_log_upload')

@@ -228,6 +228,21 @@ def create_html_response():
             width: 80%;
             max-width: 320px;
         }}
+        #log-display {{
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            height: 120px;
+            overflow-y: scroll;
+            text-align: left;
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }}
     </style>
 </head>
 <body>
@@ -361,7 +376,8 @@ document.addEventListener('DOMContentLoaded', function() {{
             }}
             const logData = await response.text();
             console.log("Log data:", logData); // Debug log
-            document.getElementById('log-display').textContent = logData || 'No logs found.';
+            logContainer.textContent = logData || 'No logs found.';
+            logContainer.scrollTop = logContainer.scrollHeight;
         }} catch (error) {{
             console.error('Failed to fetch logs:', error);
             document.getElementById('log-display').textContent = 'Failed to load logs.';
