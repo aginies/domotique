@@ -10,9 +10,13 @@ try:
 except OSError:
     version = "unknown"
 
-def serve_config_page(IP_ADDR, WS_PORT):
+def get_config():
+    import sys
+    if 'config_var' in sys.modules:
+        del sys.modules['config_var']
+    import config_var
     # Load existing configuration
-    config = {
+    return {
         "DOOR": config_var.DOOR,
         "nom_bp1": config_var.nom_bp1,
         "nom_bp2": config_var.nom_bp2,
@@ -44,6 +48,9 @@ def serve_config_page(IP_ADDR, WS_PORT):
         "DELAY_SHELLY": getattr(config_var, 'DELAY_SHELLY', 3),
         "VERSION": version,
     }
+
+def serve_config_page(IP_ADDR, WS_PORT, reboot_needed=False):
+    config = get_config()
     selected_options = {
         'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
         'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
@@ -58,6 +65,7 @@ def serve_config_page(IP_ADDR, WS_PORT):
         'shelly_no': 'False' if getattr(config_var, 'CONTROL_SHELLY', False) is False else '',
         'IP_ADDR': IP_ADDR,
         'WS_PORT': WS_PORT,
+        'reboot_banner': '<div class="reboot-banner">Configuration saved. Reboot required for changes to take effect.</div>' if reboot_needed else '',
     }
 
     html = """
@@ -178,11 +186,21 @@ def serve_config_page(IP_ADDR, WS_PORT):
         .reset-button:hover {{
             background-color: #c0392b;
         }}
+        .reboot-banner {{
+            background-color: #f39c12;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+        }}
     </style>
 </head>
 <body>
     <div class="form-container">
         <h1>Configuration pour la {DOOR} ({VERSION})</h1>
+        {reboot_banner}
         <form id="configForm" action="/save_config" method="POST">
             <div class="form-group">
                 <label for="DOOR">Nom Général</label>

@@ -155,7 +155,8 @@ def web_config(request):
     if 'config_var' in sys.modules:
         del sys.modules['config_var']
     import config_var as c_v
-    response = w_c.serve_config_page(IP_ADDR, WS_PORT)
+    reboot_needed = request.args.get('reboot_needed') == '1'
+    response = w_c.serve_config_page(IP_ADDR, WS_PORT, reboot_needed)
     return response, 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/save_config', methods=['GET', 'POST'])
@@ -326,14 +327,20 @@ def main():
         try:
             _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
             wifi_watchdog_enabled = c_v.E_WIFI and not ERR_CON_WIFI
+            # Give a small delay before starting the main server to let the 8080 server settle
+            time.sleep(2)
             asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT, error_vars,
                                               wifi_watchdog_enabled=wifi_watchdog_enabled))
         except Exception as err:
             d_u.print_and_store_log(f"Server error: {err}")
             ERR_SOCKET = True
             error_vars['Openning Socket'] = True
+            # In case of critical OSError 23, it's better to reboot
+            time.sleep(5)
+            reset()
         finally:
             asyncio.new_event_loop()
+            reset()
     else:
         d_u.print_and_store_log('Trouble with WIFI')
         o_s.oled_show_text_line("WIFI AP NOK!", 40)
