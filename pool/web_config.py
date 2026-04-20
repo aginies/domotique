@@ -2,42 +2,45 @@
 # GPL3
 
 import config_var
+import paths
 
-with open('/VERSION', 'r') as file:
-   version = file.read().strip()
-
-# Load existing configuration
-config = {
-    "DOOR": config_var.DOOR,
-    "nom_bp1": config_var.nom_bp1,
-    "nom_bp2": config_var.nom_bp2,
-    "nom_open_b":  config_var.nom_open_b,
-    "nom_close_b": config_var.nom_close_b,
-    "time_to_close": config_var.time_to_close,
-    "time_to_open": config_var.time_to_open,
-    "time_adjust": config_var.time_adjust,
-    "E_WIFI": config_var.E_WIFI,
-    "WIFI_SSID": config_var.WIFI_SSID,
-    "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
-    "AP_SSID": config_var.AP_SSID,
-    "AP_PASSWORD": config_var.AP_PASSWORD,
-    "AP_HIDDEN_SSID": config_var.AP_HIDDEN_SSID,
-    "AP_CHANNEL": config_var.AP_CHANNEL,
-    "AP_IP": config_var.AP_IP,
-    "I_LED_PIN": config_var.I_LED_PIN,
-    "LED_PIN": config_var.LED_PIN,
-    "RELAY1_PIN": config_var.RELAY1_PIN,
-    "RELAY2_PIN": config_var.RELAY2_PIN,
-    "time_ok": config_var.time_ok,
-    "time_err": config_var.time_err,
-    "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
-    "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
-    "PIN_CODE": config_var.PIN_CODE,
-    "CPU_FREQ": config_var.CPU_FREQ,
-    "VERSION": version,
-}
+try:
+    with open(paths.VERSION_FILE, 'r') as file:
+        version = file.read().strip()
+except OSError:
+    version = "unknown"
 
 def serve_config_page(IP_ADDR, WS_PORT):
+    # Load existing configuration
+    config = {
+        "DOOR": config_var.DOOR,
+        "nom_bp1": config_var.nom_bp1,
+        "nom_bp2": config_var.nom_bp2,
+        "nom_open_b":  config_var.nom_open_b,
+        "nom_close_b": config_var.nom_close_b,
+        "time_to_close": config_var.time_to_close,
+        "time_to_open": config_var.time_to_open,
+        "time_adjust": config_var.time_adjust,
+        "E_WIFI": config_var.E_WIFI,
+        "WIFI_SSID": config_var.WIFI_SSID,
+        "WIFI_PASSWORD": config_var.WIFI_PASSWORD,
+        "AP_SSID": config_var.AP_SSID,
+        "AP_PASSWORD": config_var.AP_PASSWORD,
+        "AP_HIDDEN_SSID": config_var.AP_HIDDEN_SSID,
+        "AP_CHANNEL": config_var.AP_CHANNEL,
+        "AP_IP": config_var.AP_IP,
+        "I_LED_PIN": config_var.I_LED_PIN,
+        "LED_PIN": config_var.LED_PIN,
+        "RELAY1_PIN": config_var.RELAY1_PIN,
+        "RELAY2_PIN": config_var.RELAY2_PIN,
+        "time_ok": config_var.time_ok,
+        "time_err": config_var.time_err,
+        "OLED_SCL_PIN": config_var.OLED_SCL_PIN,
+        "OLED_SDA_PIN": config_var.OLED_SDA_PIN,
+        "PIN_CODE": config_var.PIN_CODE,
+        "CPU_FREQ": config_var.CPU_FREQ,
+        "VERSION": version,
+    }
     selected_options = {
         'selected_20': 'selected' if config_var.CPU_FREQ == 20 else '',
         'selected_40': 'selected' if config_var.CPU_FREQ == 40 else '',
@@ -297,11 +300,9 @@ def serve_config_page(IP_ADDR, WS_PORT):
                 </div>
             </div>
         <div class="button-group">
-            <form id="configForm" action="/save_config" method="POST" enctype="multipart/form-data">
-                <input type="submit" value="Save">
-            </form>
-        <a href="/" class="cancel-button">Cancel</a>
-        <a href="/RESET_device" target="_blank" class="button reset-button" onclick="return confirm('Are you sure you want to reset the device? This will cause a reboot.')">Reset Device</a>
+            <input type="submit" value="Save">
+            <a href="/" class="cancel-button">Cancel</a>
+            <a href="/RESET_device" target="_blank" class="button reset-button" onclick="return confirm('Are you sure you want to reset the device? This will cause a reboot.')">Reset Device</a>
         </div>
     </form> 
     </div>
@@ -312,7 +313,7 @@ def serve_config_page(IP_ADDR, WS_PORT):
     configForm.addEventListener('change', () => {{
         configForm.action = configServerUrl + '/save_config/';
         console.log('Form action set to:', configForm.action);
-    }};
+    }});
 </script>
 </html>""".format(**config, **selected_options, **wifi_config)
     return html

@@ -24,6 +24,7 @@ import crtl_relay as c_r
 import domo_socket_server as d_s_s
 import domo_microdot as d_m
 import web_upload as w_u
+import paths
 from domo_microdot import ws_app
 from microdot import Microdot, send_file, Response
 
@@ -39,13 +40,13 @@ c_r.relay2.off()
 
 # At start we can only Open the Pool
 # remove all previous ERROR
-TO_REMOVE = ["/BP1", "/EMERGENCY_STOP", "/IN_PROGRESS"]
+TO_REMOVE = [paths.RELAY_BP1_FLAG, paths.EMERGENCY_STOP_FLAG, paths.IN_PROGRESS_FLAG]
 for doit in TO_REMOVE:
     try:
         os.remove(doit)
     except OSError:
         pass
-with open('/BP2', 'w') as file:
+with open(paths.RELAY_BP2_FLAG, 'w') as file:
     file.write('BP2 INIT FILE')
 
 def check_and_display_error():
@@ -60,23 +61,6 @@ def check_and_display_error():
         e_l.internal_led_blink(e_l.white, e_l.led_off, 1, 0.1)
     if ERR_CTRL_RELAY is True:
         e_l.internal_led_blink(e_l.pink, e_l.led_off, 1, 0.1)
-
-def oled_special_show():
-    """ Data always displayed """
-    if oled_d:
-        while True:
-            if d_u.file_exists('/IN_PROGRESS'):
-                if d_u.file_exists('/BP1'):
-                    oled_d.text("En Ouverture", 0, 50)
-                elif d_u.file_exists('/BP2'):
-                    oled_d.text("En Fermeture", 0, 50)
-                else:
-                    oled_d.text("", 0, 50)
-            if d_u.file_exists('/EMERGENCY_STOP'):
-                oled_d.text("", 0, 50)
-                oled_d.text("REBOOT NEEDED!", 0, 50)
-            oled_d.show()
-            time.sleep(1)
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
@@ -103,16 +87,25 @@ def bp1_actif(request):
     c_r.thread_do_job_crtl_relay("BP1", 1, c_v.time_to_open)
     return "", 200
 
+def _parse_duration(request):
+    try:
+        duration = int(request.args.get('duration', c_v.time_adjust))
+    except (TypeError, ValueError):
+        duration = c_v.time_adjust
+    return max(1, min(duration, 30))
+
 @ws_app.route('/OPEN_B_ACTIF', methods=['POST'])
 def open_b_actif(request):
-    d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b}{c_v.time_adjust}sec")
-    c_r.thread_do_job_crtl_relay("OPEN_B", 1, c_v.time_adjust)
+    duration = _parse_duration(request)
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_open_b} {duration}sec")
+    c_r.thread_do_job_crtl_relay("OPEN_B", 1, duration)
     return "", 200
 
 @ws_app.route('/CLOSE_B_ACTIF', methods=['POST'])
 def close_b_actif(request):
-    d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b}{c_v.time_adjust}sec")
-    c_r.thread_do_job_crtl_relay("CLOSE_B", 2, c_v.time_adjust)
+    duration = _parse_duration(request)
+    d_u.print_and_store_log(f"ACTION: {c_v.nom_close_b} {duration}sec")
+    c_r.thread_do_job_crtl_relay("CLOSE_B", 2, duration)
     return "", 200
 
 @ws_app.route('/BP2_ACTIF', methods=['POST'])
@@ -126,11 +119,11 @@ def emergency_stop(request):
     d_u.print_and_store_log("ACTION: Emergency Stop activated!")
     if oled_d is not None:
         oled_d.poweron()
-    with open('/EMERGENCY_STOP', 'w') as file:
+    with open(paths.EMERGENCY_STOP_FLAG, 'w') as file:
         file.write('Emergency stop is active and requires reboot.')
-    d_u.print_and_store_log("Created /EMERGENCY_STOP file.")
+    d_u.print_and_store_log(f"Created {paths.EMERGENCY_STOP_FLAG} file.")
     c_r.ctrl_relay_off()
-    for todo in ["BP1", "BP2"]:
+    for todo in [paths.RELAY_BP1_FLAG, paths.RELAY_BP2_FLAG]:
         try:
             os.remove(todo)
         except OSError:
@@ -140,10 +133,10 @@ def emergency_stop(request):
 
 @ws_app.route('/status', methods=['GET'])
 def status(request):
-    bp1_active = d_u.file_exists('/BP1')
-    bp2_active = d_u.file_exists('/BP2')
-    emergency_stop = d_u.file_exists('/EMERGENCY_STOP')
-    in_progress = d_u.file_exists('/IN_PROGRESS')
+    bp1_active = d_u.file_exists(paths.RELAY_BP1_FLAG)
+    bp2_active = d_u.file_exists(paths.RELAY_BP2_FLAG)
+    emergency_stop = d_u.file_exists(paths.EMERGENCY_STOP_FLAG)
+    in_progress = d_u.file_exists(paths.IN_PROGRESS_FLAG)
     status_data = {
         "BP1_active": bp1_active,
         "BP2_active": bp2_active,
@@ -175,7 +168,7 @@ def save_config(request):
 @ws_app.route('/log.txt')
 def log_file(request):
     try:
-        with open('/log.txt', 'r') as file:
+        with open(paths.LOG_FILE, 'r') as file:
             return file.read(), 200, {"Content-Type": "text/plain"}
     except FileNotFoundError:
         return "Log file not found.", 404, {"Content-Type": "text/plain"}
@@ -191,18 +184,21 @@ def get_log_action(request):
 
 @ws_app.route('/get_log_upload')
 def get_log_upload(request):
-    response, status_code, headers = w_l.serve_log_file(10, "UPLOAD")
+    response, status_code, headers = w_l.serve_log_file(20, ["UPLOAD", "UPDATE"])
     return response, status_code, headers
 
 @ws_app.route('/RESET_device')
 def reset_device(request):
     d_u.print_and_store_log("Reset button pressed")
     _thread.start_new_thread(d_u.perform_reset, ())
-    return "<htm><H1>Reset done!</H1><h2>Close this page</h2></html>", 200, {"Content-Type": "text/html"}
+    return "<html><h1>Reset done!</h1><h2>Close this page</h2></html>", 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/view')
 def view_file(request):
     file_to_view = request.args.get('file')
+    if not file_to_view:
+        return "Missing file parameter", 400, {"Content-Type": "text/plain"}
+    file_to_view = d_u.sanitize_filename(file_to_view)
     if file_to_view == "config_var.py":
         return "File not Allowed!", 404, {"Content-Type": "text/plain"}
     elif d_u.file_exists("/" + file_to_view):
@@ -213,26 +209,34 @@ def view_file(request):
 @ws_app.route('/revert_mode')
 def revert_mode(request):
     d_u.print_and_store_log("ACTION: Entering Revert mode")
-    if d_u.file_exists('/BP1'):
+    if d_u.file_exists(paths.RELAY_BP1_FLAG):
         d_u.print_and_store_log("Revert mode creating BP2")
-        os.remove("/BP1")
-        with open('/BP2', 'w') as file:
+        os.remove(paths.RELAY_BP1_FLAG)
+        with open(paths.RELAY_BP2_FLAG, 'w') as file:
             file.write('Create BP2 after revert')
-    elif d_u.file_exists('/BP2'):
+    elif d_u.file_exists(paths.RELAY_BP2_FLAG):
         d_u.print_and_store_log("Revert mode creating BP1")
-        os.remove("/BP2")
-        with open('/BP1', 'w') as file:
+        os.remove(paths.RELAY_BP2_FLAG)
+        with open(paths.RELAY_BP1_FLAG, 'w') as file:
             file.write('Create BP1 after revert')
             
     return Response(status_code=303, headers={"Location": "/"})
 
+PROTECTED_FILES = {"config_var.py", "main.py", "boot.py", "VERSION"}
+
 @ws_app.route('/delete')
 def delete_file(request):
     file_to_delete = request.args.get('file')
-    d_u.print_and_store_log(f"File {file_to_delete}")
+    if not file_to_delete:
+        return "Missing file parameter", 400, {"Content-Type": "text/plain"}
+    file_to_delete = d_u.sanitize_filename(file_to_delete)
+    if file_to_delete in PROTECTED_FILES:
+        return "File not Allowed!", 403, {"Content-Type": "text/plain"}
+    target = "/" + file_to_delete
+    d_u.print_and_store_log(f"File {target}")
     try:
-        os.remove(file_to_delete)
-        d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
+        os.remove(target)
+        d_u.print_and_store_log(f"File {target} deleted successfully.")
         return Response(status_code=303, headers={"Location": "/file_management"})
     except OSError as e:
         return f"Error deleting file: {e}", 400, {"Content-Type": "text/plain"}
@@ -267,7 +271,7 @@ def main():
     ERR_CON_WIFI = False
     # Start up info
     info_start = "#############--- Guibo Control ---############# "
-    d_u.check_and_delete_if_too_big("/log.txt", 20)
+    d_u.check_and_delete_if_too_big(paths.LOG_FILE, 20)
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
@@ -300,7 +304,6 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
     _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
-    _thread.start_new_thread(oled_special_show, ())
 
     error_vars = {
         'Openning Socket': ERR_SOCKET,
@@ -318,15 +321,17 @@ def main():
 
     # We are ready
     check_and_display_error()
-    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
-
     o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
         try:
-            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT))
+            _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
+            wifi_watchdog_enabled = c_v.E_WIFI and not ERR_CON_WIFI
+            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT, error_vars,
+                                              wifi_watchdog_enabled=wifi_watchdog_enabled))
         except Exception as err:
             d_u.print_and_store_log(f"Server error: {err}")
             ERR_SOCKET = True
+            error_vars['Openning Socket'] = True
         finally:
             asyncio.new_event_loop()
     else:

@@ -4,13 +4,14 @@
 """ Main HTML Web interface """
 import domo_utils as d_u
 import config_var as c_v
+import paths
 
 def create_html_response():
     """ Créer la réponse HTML """
-    emergency_exists = d_u.file_exists("/EMERGENCY_STOP")
-    bp1_exists = d_u.file_exists('/BP1')
+    emergency_exists = d_u.file_exists(paths.EMERGENCY_STOP_FLAG)
+    bp1_exists = d_u.file_exists(paths.RELAY_BP1_FLAG)
     disabled1 = "disabled" if bp1_exists else ""
-    bp2_exists = d_u.file_exists('/BP2')
+    bp2_exists = d_u.file_exists(paths.RELAY_BP2_FLAG)
     disabled2 = "disabled" if bp2_exists else ""
     disabled_open_b = "disabled" if emergency_exists else ""
     disabled_close_b = "disabled" if emergency_exists else ""
@@ -22,6 +23,13 @@ def create_html_response():
     button_style_open_b = BUTTON_DISABLED if emergency_exists else ""
     button_style_close_b = BUTTON_DISABLED if emergency_exists else ""
     PIN_CODE = c_v.PIN_CODE
+    try:
+        with open(paths.VERSION_FILE, 'r') as file:
+            version = file.read().strip()
+    except OSError:
+        version = "unknown"
+    current_date = d_u.show_rtc_date()
+
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -205,6 +213,21 @@ def create_html_response():
             gap: 10px;
             margin-bottom: 0px;
         }}
+        .slider-group {{
+            margin: 12px auto 8px;
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+        }}
+        .slider-group label {{
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+        }}
+        .slider-group input[type="range"] {{
+            width: 80%;
+            max-width: 320px;
+        }}
     </style>
 </head>
 <body>
@@ -218,9 +241,22 @@ def create_html_response():
             <button id="BP1" class="button" {disabled1} {button_style1}>{c_v.nom_bp1}</button>
             <button id="BP2" class="button" {disabled2} {button_style2}>{c_v.nom_bp2}</button>
         </div>
+        <div class="slider-group">
+            <label for="adjustTime">Durée rapide: <span id="adjustTimeValue">{c_v.time_adjust}</span> sec</label>
+            <input type="range" id="adjustTime" min="1" max="30" value="{c_v.time_adjust}" step="1" list="tickmarks">
+            <datalist id="tickmarks">
+                <option value="1" label="1"></option>
+                <option value="5"></option>
+                <option value="10"></option>
+                <option value="15" label="15"></option>
+                <option value="20"></option>
+                <option value="25"></option>
+                <option value="30" label="30"></option>
+            </datalist>
+        </div>
         <div class="button-group">
-            <button id="OPEN_B" class="button-small" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} {c_v.time_adjust}sec</button>
-            <button id="CLOSE_B" class="button-small" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} {c_v.time_adjust}sec</button>
+            <button id="OPEN_B" class="button-small" {disabled_open_b} {button_style_open_b}>{c_v.nom_open_b} <span id="openBSeconds">{c_v.time_adjust}</span>sec</button>
+            <button id="CLOSE_B" class="button-small" {disabled_close_b} {button_style_close_b}>{c_v.nom_close_b} <span id="closeBSeconds">{c_v.time_adjust}</span>sec</button>
         </div>
         <div>
             <pre id="log-display"></pre>
@@ -229,6 +265,9 @@ def create_html_response():
         <!--<div id="timestamp"></div>-->
         <div id="rebootMessage" class="reboot-message">
             Le dispositif nécessite un redémarrage !
+        </div>
+        <div style="text-align: center; margin-top: 20px; font-size: 0.8em; color: #999; border-top: 1px solid #eee; padding-top: 10px;">
+            Version: {version} - {current_date}
         </div>
     </div>
     <div class="footer">
@@ -254,8 +293,19 @@ document.addEventListener('DOMContentLoaded', function() {{
     const bp2Button = document.getElementById('BP2');
     const open_bButton = document.getElementById('OPEN_B');
     const close_bButton = document.getElementById('CLOSE_B');
+    const adjustTimeSlider = document.getElementById('adjustTime');
+    const adjustTimeValue = document.getElementById('adjustTimeValue');
+    const openBSeconds = document.getElementById('openBSeconds');
+    const closeBSeconds = document.getElementById('closeBSeconds');
     const logContainer = document.getElementById('log-display');
     const timestampElement = document.getElementById('timestamp');
+
+    adjustTimeSlider.addEventListener('input', () => {{
+        const v = adjustTimeSlider.value;
+        adjustTimeValue.textContent = v;
+        openBSeconds.textContent = v;
+        closeBSeconds.textContent = v;
+    }});
 
     let currentProgressBarInterval = null; // Pour gérer l'animation en cours
     let emergencyActiveClient = false; // État d'urgence côté client
@@ -461,8 +511,8 @@ document.addEventListener('DOMContentLoaded', function() {{
     }}
 
     bp1Button.addEventListener('click', () => handleButtonClick('BP1', '/BP1_ACTIF'));
-    open_bButton.addEventListener('click', () => handleButtonClick('OPEN_B', '/OPEN_B_ACTIF'));
-    close_bButton.addEventListener('click', () => handleButtonClick('CLOSE_B', '/CLOSE_B_ACTIF'));
+    open_bButton.addEventListener('click', () => handleButtonClick('OPEN_B', '/OPEN_B_ACTIF?duration=' + adjustTimeSlider.value));
+    close_bButton.addEventListener('click', () => handleButtonClick('CLOSE_B', '/CLOSE_B_ACTIF?duration=' + adjustTimeSlider.value));
     bp2Button.addEventListener('click', () => handleButtonClick('BP2', '/BP2_ACTIF', true));
     emergencyButton.addEventListener('click', handleEmergencyStop);
     updateStatus();
