@@ -4,10 +4,13 @@ from hcsr04 import HCSR04
 import esp32_led as e_l
 import time
 import domo_utils as d_u
+import config_var as c_v
 
-sensor = HCSR04(trigger_pin=18, echo_pin=7, echo_timeout_us=100000)
-
-e_l.french_flag()
+sensor = HCSR04(
+    trigger_pin=c_v.HCSR04_TRIGGER_PIN,
+    echo_pin=c_v.HCSR04_ECHO_PIN,
+    echo_timeout_us=c_v.HCSR04_ECHO_TIMEOUT_US,
+)
 
 def show_distance_color(distance_cm):
     """
@@ -16,12 +19,6 @@ def show_distance_color(distance_cm):
     - Fades from green to red between 150cm and 15cm.
     - Blinks red continuously at 15cm.
     """
-    last_distance_multiple = None
-    current_multiple = int(distance_cm / 10)
-    #if current_multiple != last_distance_multiple:
-    #    e_l.blink_color(e_l.blue, 3, 250)
-    #    last_distance_multiple = current_multiple
-
     if distance_cm >= 191:
         e_l.internal_led_off()
     elif 190 >= distance_cm >= 151:
@@ -43,19 +40,20 @@ def show_distance_color(distance_cm):
 
 if __name__ == '__main__':
     d_u.set_freq(160)
-    try:   
+    e_l.french_flag()
+    try:
         last_distance = -1
         while True:
             try:
-                distance = int(sensor.distance_cm())
-                current_distance = int(distance) 
+                current_distance = int(sensor.distance_cm())
                 if current_distance != last_distance:
-                    #print(f"Distance changed: {distance} cm -> {current_distance} cm")
                     show_distance_color(current_distance)
                     last_distance = current_distance
                 time.sleep(0.01)
             except OSError as ex:
                 print('ERROR getting distance:', ex)
+                e_l.internal_led_off()
+                last_distance = -1
 
     except KeyboardInterrupt:
         e_l.internal_led_off()
