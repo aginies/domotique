@@ -66,6 +66,8 @@ async def start_microdot_ws(IP_ADDR, WS_PORT, error_vars=None, wifi_watchdog_ena
     if wifi_watchdog_enabled:
         import domo_wifi as d_w
         asyncio.create_task(d_w.wifi_watchdog(error_vars=error_vars))
+    import gc
+    gc.collect()
     d_u.print_and_store_log("Start microdot ws server")
     await ws_app.start_server(
         debug=False,

@@ -1,5 +1,6 @@
 import gc
 import socket
+import utime
 
 import domo_utils as d_u
 import web_upload as w_u
@@ -15,6 +16,8 @@ def start_socket_server(ipaddr, port):
         ipaddr (str): The IP address to bind the server to (e.g., '0.0.0.0').
         port (int): The port to listen on (e.g., 80).
     """
+    utime.sleep(1)
+    gc.collect()
     d_u.print_and_store_log("Starting the Socket server")
     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

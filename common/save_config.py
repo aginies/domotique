@@ -44,37 +44,39 @@ def save_configuration(request, IP_ADDR):
         else:
             parsed_items[d_u.url_decode(pair)] = ""
 
+    # Get current config
+    config = w_c.get_config()
+
     for key, value in parsed_items.items():
         # Specific handling for CPU_FREQ from the dropdown
         if key == 'CPU_FREQ':
             try:
-                w_c.config[key] = int(value)
+                config[key] = int(value)
             except ValueError:
                 d_u.print_and_store_log(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value.")
             continue
 
     for key, value in parsed_items.items():
-        if key in w_c.config:
-            current_config_value = w_c.config.get(key)
+        if key in config:
+            current_config_value = config.get(key)
 
-            if isinstance(current_config_value, int):
+            if isinstance(current_config_value, bool):
+                config[key] = value.lower() == 'true'
+            elif isinstance(current_config_value, int):
                 try:
-                    w_c.config[key] = int(value)
+                    config[key] = int(value)
                 except ValueError:
                     d_u.print_and_store_log(f"Warning: Could not convert '{value}' to int for '{key}'. Keeping previous value or string.")
             elif isinstance(current_config_value, float):
                 try:
-                    w_c.config[key] = float(value)
+                    config[key] = float(value)
                 except ValueError:
                     d_u.print_and_store_log(f"Warning: Could not convert '{value}' to float for '{key}'. Keeping previous value or string.")
-            elif isinstance(current_config_value, bool):
-                # Convert 'True'/'False' strings to boolean (case-insensitive)
-                w_c.config[key] = value.lower() == 'true'
             else:
-                w_c.config[key] = value
+                config[key] = value
 
-    save_config(w_c.config)
-    redirect_url = (f"http://{IP_ADDR}/web_config")
+    save_config(config)
+    redirect_url = (f"http://{IP_ADDR}/web_config?reboot_needed=1")
     response_headers = [
         "HTTP/1.1 303 See Other",
         f"Location: {redirect_url}",
