@@ -21,28 +21,12 @@ def deactivate_active_interfaces():
         ap_if.active(False)
 
 def connect_to_wifi():
-    """ Connect to an existing network with improved stability and feedback """
+    """ Connect to an existing network - reverted to stable version """
     deactivate_active_interfaces()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.active():
         sta_if.active(True)
     
-    # Set hostname to the name of the device (useful for router identification)
-    try:
-        hostname = c_v.DOOR.replace(" ", "_")
-        if hasattr(network, 'hostname'):
-            network.hostname(hostname)
-        else:
-            sta_if.config(dhcp_hostname=hostname)
-    except Exception:
-        pass
-
-    # Disable power management to avoid latency/disconnection issues
-    try:
-        sta_if.config(pm=network.WLAN.PM_NONE)
-    except Exception:
-        pass
-
     d_u.print_and_store_log(f"Connecting to WiFi SSID: {c_v.WIFI_SSID}...")
     try:
         sta_if.connect(c_v.WIFI_SSID, c_v.WIFI_PASSWORD)
@@ -50,26 +34,15 @@ def connect_to_wifi():
         d_u.print_and_store_log(f"WiFi Connect Error: {err}")
         return {'success': False, 'ERR_WIFI': True}
 
-    max_attempts = 20
+    max_attempts = 10
     attempt = 0
     while not sta_if.isconnected() and attempt < max_attempts:
         attempt += 1
-        if attempt % 3 == 0:
-            info = f"Connect Wifi {attempt//3}/6"
-            d_u.print_and_store_log(info)
-            if o_s.oled_d:
-                o_s.oled_show_text_line(info, 10)
-        
-        # Check specific statuses if available
-        status = sta_if.status()
-        if status == network.STAT_WRONG_PASSWORD:
-            d_u.print_and_store_log("WiFi Error: Wrong Password")
-            break
-        elif status == network.STAT_NO_AP_FOUND:
-            # We keep trying as the AP might be starting up
-            pass
-            
-        utime.sleep(1)
+        info = f"Connect Wifi {attempt}/{max_attempts}"
+        d_u.print_and_store_log(info)
+        if o_s.oled_d:
+            o_s.oled_show_text_line(info, 10)
+        utime.sleep(3)
 
     if o_s.oled_d:
         o_s.oled_d.fill(1)
@@ -79,6 +52,12 @@ def connect_to_wifi():
         o_s.oled_d.show()
 
     if sta_if.isconnected():
+        # Disable power management after connection for stability
+        try:
+            sta_if.config(pm=network.WLAN.PM_NONE)
+        except Exception:
+            pass
+            
         config = sta_if.ifconfig()
         d_u.print_and_store_log(f"Connected to {c_v.WIFI_SSID}!")
         d_u.print_and_store_log(f"IP: {config[0]}, Gateway: {config[2]}")
