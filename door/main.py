@@ -26,6 +26,7 @@ import domo_socket_server as d_s_s
 import manage_rfid as m_r
 import domo_microdot as d_m
 import web_upload as w_u
+import paths
 from domo_microdot import ws_app
 from microdot import Microdot, send_file, Response
 
@@ -60,14 +61,14 @@ def oled_special_show():
     """ Data always displayed """
     if oled_d:
         while True:
-            if d_u.file_exists('/IN_PROGRESS'):
-                if d_u.file_exists('/BP1'):
+            if d_u.file_exists(paths.IN_PROGRESS_FLAG):
+                if d_u.file_exists(paths.RELAY_BP1_FLAG):
                     oled_d.text("En Ouverture", 0, 50)
-                elif d_u.file_exists('/BP2'):
+                elif d_u.file_exists(paths.RELAY_BP2_FLAG):
                     oled_d.text("En Fermeture", 0, 50)
                 else:
                     oled_d.text("", 0, 50)
-            if d_u.file_exists('/EMERGENCY_STOP'):
+            if d_u.file_exists(paths.EMERGENCY_STOP_FLAG):
                 oled_d.text("", 0, 50)
                 oled_d.text("REBOOT NEEDED!", 0, 50)
             oled_d.show()
@@ -75,11 +76,7 @@ def oled_special_show():
 
 def start_WIFI_ap():
     ap = d_w.setup_access_point()
-    if ap:
-        ERR_WIFI = False
-    else:
-        ERR_WIFI = True
-    return ap, ERR_WIFI
+    return ap, ap is None
 
 @ws_app.before_request
 def log_client_ip(request):
@@ -100,9 +97,9 @@ def bp1_actif(request):
 
 @ws_app.route('/status', methods=['GET'])
 def status(request):
-    bp1_active = d_u.file_exists('/BP1')
-    bp2_active = d_u.file_exists('/BP2')
-    in_progress = d_u.file_exists('/IN_PROGRESS')
+    bp1_active = d_u.file_exists(paths.RELAY_BP1_FLAG)
+    bp2_active = d_u.file_exists(paths.RELAY_BP2_FLAG)
+    in_progress = d_u.file_exists(paths.IN_PROGRESS_FLAG)
     status_data = {
         "BP1_active": bp1_active,
         "BP2_active": bp2_active,
@@ -133,7 +130,7 @@ def save_config(request):
 @ws_app.route('/log.txt')
 def log_file(request):
     try:
-        with open('/log.txt', 'r') as file:
+        with open(paths.LOG_FILE, 'r') as file:
             return file.read(), 200, {"Content-Type": "text/plain"}
     except FileNotFoundError:
         return "Log file not found.", 404, {"Content-Type": "text/plain"}
@@ -166,6 +163,9 @@ def reset_device(request):
 @ws_app.route('/view')
 def view_file(request):
     file_to_view = request.args.get('file')
+    if not file_to_view:
+        return "Missing file parameter", 400, {"Content-Type": "text/plain"}
+    file_to_view = d_u.sanitize_filename(file_to_view)
     if file_to_view == "config_var.py":
         return "File not Allowed!", 404, {"Content-Type": "text/plain"}
     elif d_u.file_exists("/" + file_to_view):
@@ -173,13 +173,21 @@ def view_file(request):
     else:
         return "File not found", 404, {"Content-Type": "text/plain"}
 
+PROTECTED_FILES = {"config_var.py", "main.py", "boot.py", "VERSION"}
+
 @ws_app.route('/delete')
 def delete_file(request):
     file_to_delete = request.args.get('file')
-    d_u.print_and_store_log(f"File {file_to_delete}")
+    if not file_to_delete:
+        return "Missing file parameter", 400, {"Content-Type": "text/plain"}
+    file_to_delete = d_u.sanitize_filename(file_to_delete)
+    if file_to_delete in PROTECTED_FILES:
+        return "File not Allowed!", 403, {"Content-Type": "text/plain"}
+    target = "/" + file_to_delete
+    d_u.print_and_store_log(f"File {target}")
     try:
-        os.remove(file_to_delete)
-        d_u.print_and_store_log(f"File {file_to_delete} deleted successfully.")
+        os.remove(target)
+        d_u.print_and_store_log(f"File {target} deleted successfully.")
         return Response(status_code=303, headers={"Location": "/file_management"})
     except OSError as e:
         return f"Error deleting file: {e}", 400, {"Content-Type": "text/plain"}
@@ -203,11 +211,12 @@ def upload_file(request):
     )
 
 def get_status():
+    global door_state, statusd
     door_state = door_sensor.value()
     while True:
         prev_door_state = door_state
         door_state = door_sensor.value()
-        if prev_door_state == 0 and door_state == 1:	
+        if prev_door_state == 0 and door_state == 1:
             led.value(0)
             e_l.internal_led_color(e_l.red)
             statusd = "Status: FERME"
@@ -239,7 +248,7 @@ def main():
     ERR_CON_WIFI = False
     # Start up info
     info_start = "#############--- Guibo Control ---############# "
-    d_u.check_and_delete_if_too_big("/log.txt", 20)
+    d_u.check_and_delete_if_too_big(paths.LOG_FILE, 20)
     d_u.print_and_store_log(info_start)
     d_u.set_freq(c_v.CPU_FREQ)
     oled_d = o_s.initialize_oled()
@@ -272,7 +281,6 @@ def main():
                 o_s.oled_show_text_line("AP Wifi NOK!", 0)
 
     _thread.start_new_thread(d_s_s.start_socket_server, (IP_ADDR, WS_PORT))
-    _thread.start_new_thread(oled_special_show, ())
     _thread.start_new_thread(get_status, ())
     #_thread.start_new_thread(m_r.rfid_do_access_control, ())
 
@@ -304,15 +312,17 @@ def main():
 
     # We are ready
     check_and_display_error()
-    _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
-
     o_s.oled_show_text_line("", 20)
     if IP_ADDR and IP_ADDR != '0.0.0.0':
         try:
-            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT))
+            _thread.start_new_thread(o_s.oled_constant_show, (IP_ADDR, PORT, error_vars))
+            wifi_watchdog_enabled = c_v.E_WIFI and not ERR_CON_WIFI
+            asyncio.run(d_m.start_microdot_ws(IP_ADDR, PORT, error_vars,
+                                              wifi_watchdog_enabled=wifi_watchdog_enabled))
         except Exception as err:
             d_u.print_and_store_log(f"Server error: {err}")
             ERR_SOCKET = True
+            error_vars['Openning Socket'] = True
         finally:
             asyncio.new_event_loop()
     else:

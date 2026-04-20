@@ -2,9 +2,13 @@
 # GPL3
 
 import config_var
+import paths
 
-with open('/VERSION', 'r') as file:
-   version = file.read().strip()
+try:
+    with open(paths.VERSION_FILE, 'r') as file:
+        version = file.read().strip()
+except OSError:
+    version = "unknown"
 
 
 def format_list_for_html(data):
