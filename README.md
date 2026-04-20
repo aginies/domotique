@@ -18,8 +18,9 @@ Control a Pool shutter
 
 * Get info on the status of a shutter, **open** or **closed** using external **LED** (optionnal)
 * Control using a **Wifi Access Point** the curtain with **Open / Close / Emergency Stop** buttons on a **web server**
+* **Quick open/close** with a configurable duration **slider** (1 sec → full open time)
 * Display all relevant **informations** on a 0.96" **oled screen** (optionnal)
-* **Live log** available
+* **Live log** available (auto-rotated to protect flash)
 * **Configuration** the timing and other parameters through a web interface
 * **Files management**
 * **Udpate** support an **update.bin** file
@@ -49,6 +50,9 @@ All libs/modules needed to get stuff working.
 
 Common Features:
 * Connect to an **existing Wifi**, or Create a **dedicated WIFI Access Point**
+* **Background WiFi watchdog** auto-reconnects with exponential backoff if the AP drops the device
+* **Auto-rotated log** (`/log.txt` → `/log.txt.1`) to limit flash wear
+* Centralized flash-state paths in **paths.py** (no scattered magic strings)
 * **Debug** easily using **color** (internal LED)
 * All Variables you need to adapt like **PIN** are in **config_var.py**
 
@@ -65,7 +69,7 @@ Common Features:
 
 # Installation
 
-``make
+```make
 Creating a temp_door_domotic dir and copy files in
 # Create a temporary directory to stage the files
 '../common/domo_wifi.py' -> 'temp_door_domotic/domo_wifi.py'
@@ -76,16 +80,16 @@ Creating a temp_door_domotic dir and copy files in
 ....
 Packed 23 files into update.bin (SHA256 included).
 update.bin created successfully.
-``
+```
 
 The **update.bin** can be used to update a running version, just upload the file
 on the ESP32, it will keep all existing configuration if compatible.
 
-``make copy 
+```make copy 
 Starting upload to /dev/ttyACM0
     - Copying temp_door_domotic/domo_wifi.py to /
 ...
-``
+```
 
 # Debug LED color
 
