@@ -33,20 +33,27 @@ Control a Pool shutter
 
 # solar
 
-Divert solar surplus power to a resistive load (e.g. hot water tank / ballon d'eau chaude)
+High-performance PV Router: Divert solar surplus power to a resistive load (e.g. hot water tank).
 
-* Polls a **Shelly EM** (Gen1) for real-time net grid power
-* **PI controller** (tunable Kp/Ki) drives a **SSR** via burst-fire to absorb exactly the surplus
-* **Relay** protects the SSR and enables emergency shutdown
-* **Force mode**: scheduled time window or manual override to run at full power regardless of surplus
-* **Boost mode**: one-shot full-power run for a configurable duration
-* **DS18B20** temperature sensor support — safety cutoff and target temperature for force/boost
-* **MQTT** classic publish of grid power, equipment power, duty cycle and temperature
-* Display all relevant **informations** on a 0.96" **oled screen** (optional)
-* **Live log** available
-* **Files management**
-* **Configuration** using a web interface (PID gains, burst period, thresholds, MQTT…)
-* **Update** support via an **update.bin** file
+* **Multiple Data Sources**:
+    * **MQTT Direct (Fastest)**: Instant push from Shelly EM.
+    * **JSY-MK-194 (Wired)**: Direct UART connection for ultra-low latency.
+    * **HTTP Polling**: Standard Shelly API requests.
+* **1-second physical cycle** (Burst-fire) for maximum responsiveness.
+* **Home Assistant**: Full Auto-Discovery support (Power, Temps, Status).
+* **Safety**: Dual temperature cutoffs (ESP32 + SSR), relay hardware protection, and watchdog safety state.
+* **Advanced Web UI**: Interactive Chart.js graphs, colorized live logs, manual **Boost** (1-3h), and full secure configuration.
+* **Update** support via an **update.bin** file.
+
+# lilygo_solar
+
+Dedicated remote color dashboard for the Solar Diverter.
+
+* Hardware: Designed for **LILYGO T-Display (1.14" LCD)**.
+* **Multi-Screen Cycle**: Dashboard (Huge text) -> Power Graph (5m) -> Temperature Graph (5m).
+* **Interactive**: Use hardware buttons to toggle between visual modes.
+* **Intelligent Visuals**: Dynamic Y-axis scaling and color-coded status.
+* **Lightweight**: Optimized standalone core for limited memory.
 
 # parking_detection
 
@@ -67,61 +74,22 @@ All libs/modules needed to get stuff working.
 
 Common Features:
 * Connect to an **existing Wifi**, or Create a **dedicated WIFI Access Point**
-* **Background WiFi watchdog** auto-reconnects with exponential backoff if the AP drops the device
-* **Auto-rotated log** (`/log.txt` → `/log.txt.1`) to limit flash wear
+* **Background WiFi watchdog** auto-reconnects with exponential backoff.
+* **Robust Log Management**: Auto-rotated logs with two generations (`.1`, `.2`) and scheduled cleanup every 2 hours to protect flash space.
 * Centralized flash-state paths in **paths.py** (no scattered magic strings)
 * **Debug** easily using **color** (internal LED)
 * All Variables you need to adapt like **PIN** are in **config_var.py**
 
 # Hardware
 
-* Develop on an **ESP32-S3-WROOM** N16R8. Should work on an ESP32 version but the script needs to be adapted for PIN, and maybe disable the internal LED. Be sure to build **micropython** for N16R8 to use all **storage** and **SPIRAM** available. See above in external link.
-* Use **LED** (5V) to get status of the door
-* a **Resistance** to protect the LED (~270ohms)
-* 5V or 3.3V **relay** to control motors
-* 0.96" **Oled I2C** screen or any other I2C. Adapt to your hardware
-* **MC-38 magnetic** captor, or any other similar stuff to get status of the door
-* **hcsr-04 ultra sonic** sensor (parking_detection)
-* **mfrc522 RFID** for card auth
-
-# Installation
-
-```make
-Creating a temp_door_domotic dir and copy files in
-# Create a temporary directory to stage the files
-'../common/domo_wifi.py' -> 'temp_door_domotic/domo_wifi.py'
-'../common/save_config.py' -> 'temp_door_domotic/save_config.py'
-'../common/domo_microdot.py' -> 'temp_door_domotic/domo_microdot.py'
-'../common/domo_utils.py' -> 'temp_door_domotic/domo_utils.py'
-'../common/oled_ssd1306.py' -> 'temp_door_domotic/oled_ssd1306.py'
-....
-Packed 23 files into update.bin (SHA256 included).
-update.bin created successfully.
-```
-
-The **update.bin** can be used to update a running version, just upload the file
-on the ESP32, it will keep all existing configuration if compatible.
-
-```make copy 
-Starting upload to /dev/ttyACM0
-    - Copying temp_door_domotic/domo_wifi.py to /
-...
-```
-
-# Debug LED color
-
-At start:
-* 3 fast blink this is OK
-* 5 slow blink at start something is wrong
-
-Color information
-* blue: setup an WIFI Access Point
-* white: Connect to an existing Wifi
-* green: Init the OLED screen
-* pink: Control the 5V Relay
-* purple: Open a Socket
-
-After start, in case of error, the assigned color will blink.
+* Develop on an **ESP32-S3-WROOM** N16R8. 
+* Use **LED** (5V) to get status of the door.
+* 5V or 3.3V **relay** to control motors / provide safety cutoff.
+* 0.96" **Oled I2C** (SSD1306) or **LILYGO ST7789** IPS screens.
+* **Power Meters**: Shelly EM (Wi-Fi) or JSY-MK-194 (UART).
+* **MC-38 magnetic** captor, or any other similar stuff to get status of the door.
+* **hcsr-04 ultra sonic** sensor (parking_detection).
+* **mfrc522 RFID** for card auth.
 
 # Software
 
