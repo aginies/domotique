@@ -148,6 +148,9 @@ def _worker():
     """Background thread for MQTT communication."""
     global _client, _discovery_sent
     node_id = c_v.MQTT_NAME.replace(" ", "_").lower()
+    # Send a PINGREQ at half the keepalive interval so the broker never times us out.
+    _ping_every = max(5, getattr(c_v, 'MQTT_KEEPALIVE', 60) // 2)
+    _last_ping = utime.time()
 
     while True:
         _lock.acquire()
@@ -160,20 +163,28 @@ def _worker():
                 if _client is None:
                     _client = _connect()
                     is_connected[0] = True
-                    utime.sleep_ms(1000) # Wait for connection to settle
+                    utime.sleep_ms(500)
                     if not _discovery_sent:
                         _send_discovery(_client, node_id)
-                
-                # Check for incoming messages (Shelly)
+
+                # Read any incoming Shelly message before publishing.
                 _client.check_msg()
 
                 retain = getattr(c_v, 'MQTT_RETAIN', False)
                 for topic, payload in msgs:
-                    # Explicitly encode payload to bytes
                     p_bytes = payload.encode("utf-8") if isinstance(payload, str) else payload
                     _client.publish(topic, p_bytes, retain=retain)
-                    utime.sleep_ms(100) # Inter-packet gap
-                
+                    utime.sleep_ms(50)
+                    # Keep reading between publishes so Shelly data is never
+                    # blocked for more than one inter-packet gap.
+                    _client.check_msg()
+
+                # Keepalive ping so the broker doesn't drop an idle connection.
+                now = utime.time()
+                if (now - _last_ping) >= _ping_every:
+                    _client.ping()
+                    _last_ping = now
+
                 is_connected[0] = True
 
         except Exception as err:
@@ -184,14 +195,20 @@ def _worker():
                 try: _client.sock.close()
                 except: pass
             _client = None
+            # Short sleep so reconnection completes well within SHELLY_TIMEOUT.
+            utime.sleep_ms(2000)
 
-        utime.sleep_ms(1000)
+        utime.sleep_ms(100)
 
 def _ensure_thread():
     global _thread_started
     if not _thread_started:
         _thread_started = True
         _thread.start_new_thread(_worker, ())
+
+def ensure_started():
+    """Start the MQTT worker thread if not already running (e.g. when E_MQTT=False but E_SHELLY_MQTT=True)."""
+    _ensure_thread()
 
 def publish_status(grid_power, equipment_power, equipment_active, force_mode, equipment_percent, water_temp, esp32_temp):
     if not getattr(c_v, 'E_MQTT', False) or not c_v.MQTT_IP:

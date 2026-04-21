@@ -20,6 +20,7 @@ safe_state = False         # True when Shelly unreachable > SHELLY_TIMEOUT
 last_shelly_error = None
 current_water_temp = None  # °C from DS18B20, None if not available
 current_ssr_temp = None    # °C from DS18B20 on heatsink, None if not available
+grid_source = "HTTP"       # "MQTT" or "HTTP"
 boost_end_time = 0         # utime.time() when boost expires
 power_history = []         # Rolling buffer of last 5 minutes (60 points)
 
@@ -325,12 +326,18 @@ async def monitor_loop():
     Polls Shelly EM every POLL_INTERVAL seconds, runs PI controller,
     enforces safety rules, and updates _current_duty for burst_control_loop.
     """
-    global current_grid_power, force_mode_active, safe_state
+    global current_grid_power, force_mode_active, safe_state, equipment_active
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
+    global current_water_temp, current_ssr_temp, grid_source
 
     _init_ds18b20()
     _last_good_poll = utime.time()
     temp_read_counter = 0
+
+    # Ensure MQTT worker is running when Shelly MQTT is the grid source,
+    # even if E_MQTT (status publishing) is disabled.
+    if getattr(c_v, 'E_SHELLY_MQTT', False):
+        m_c.ensure_started()
 
     d_u.print_and_store_log("Solar monitor loop started")
 
@@ -393,51 +400,106 @@ async def monitor_loop():
                 _relay.value(1)
 
             # ── Grid Power Retrieval ──────────────────────────────────────────
-            # Try MQTT first if enabled
-            use_http = True
-            if getattr(c_v, 'E_SHELLY_MQTT', False):
+            # 1. Try JSY (Wired UART) first if enabled
+            use_shelly = True
+            if getattr(c_v, 'E_JSY', False):
+                # Import and Init on first run
+                global _jsy
+                if '_jsy' not in globals():
+                    from jsy_mk194 import JSY_MK194
+                    _jsy = JSY_MK194(c_v.JSY_UART_ID, c_v.JSY_TX, c_v.JSY_RX)
+                    d_u.print_and_store_log("SOLAR: JSY-MK-194 initialized")
+
+                jsy_data = _jsy.read_data()
+                if jsy_data:
+                    current_grid_power, equipment_power = jsy_data
+                    if grid_source != "JSY":
+                        d_u.print_and_store_log("SOLAR: JSY-MK-194 grid source active")
+                    grid_source = "JSY"
+                    last_shelly_error = None
+                    _last_good_poll = now
+                    use_shelly = False
+                    if safe_state:
+                        d_u.print_and_store_log("SOLAR JSY-MK-194 recovered — resuming control")
+                        _pi.reset()
+                    safe_state = False
+                else:
+                    # JSY error: wait for next poll
+                    if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
+                        if not _safe_state_logged:
+                            d_u.print_and_store_log("SOLAR WATCHDOG: JSY-MK-194 timeout — safe-state")
+                            _safe_state_logged = True
+                            _pi.reset()
+                        safe_state = True
+                        _current_duty = 0.0
+                        _emergency_shutdown()
+                    await asyncio.sleep(0.1)
+                    continue
+
+            # 2. Try MQTT if enabled and JSY not used
+            if use_shelly and getattr(c_v, 'E_SHELLY_MQTT', False):
+                # --- STRICT MQTT MODE ---
                 mqtt_val = m_c.latest_mqtt_grid_power[0]
                 if mqtt_val is not None:
-                    # In MQTT mode, we don't 'pull', we just use the latest push
+                    # Fresh data received: consume and fall through to PI logic
+                    m_c.latest_mqtt_grid_power[0] = None
+                    if grid_source != "MQTT":
+                        d_u.print_and_store_log("SOLAR: MQTT grid source active")
+                    grid_source = "MQTT"
                     current_grid_power = mqtt_val
                     last_shelly_error = None
                     _last_good_poll = now
-                    use_http = False
-                    
                     if safe_state:
-                        d_u.print_and_store_log("SOLAR Shelly MQTT active — resuming control")
-                        _pi.reset()
-                    safe_state = False
-
-            if use_http:
-                try:
-                    current_grid_power = await _get_shelly_power_async()
-                    last_shelly_error  = None
-                    _last_good_poll    = now
-
-                    if safe_state:
-                        d_u.print_and_store_log("SOLAR Shelly HTTP online — re-enabling relay")
+                        d_u.print_and_store_log("SOLAR Shelly MQTT recovered — resuming control")
                         _relay.value(1)
                         _pi.reset()
-                    safe_state          = False
-                    _safe_state_logged  = False
-
-                except Exception as err:
-                    last_shelly_error = str(err)
-                    elapsed = now - _last_good_poll
-                    timeout = getattr(c_v, 'SHELLY_TIMEOUT', 10)
-                    if elapsed >= timeout:
+                        _safe_state_logged = False
+                    safe_state = False
+                else:
+                    # No new data: check for timeout then skip PI logic
+                    if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
                         if not _safe_state_logged:
-                            d_u.print_and_store_log(
-                                f"SOLAR WATCHDOG: Shelly unreachable {elapsed}s — safe-state (equipment off)"
-                            )
+                            d_u.print_and_store_log("SOLAR WATCHDOG: No MQTT data from Shelly — safe-state")
                             _safe_state_logged = True
                             _pi.reset()
-                        safe_state     = True
-                        _current_duty  = 0.0
-                        _emergency_shutdown()
-                    _publish_status_mqtt()
-                    await asyncio.sleep(poll_int)
+                        if not safe_state:
+                            _emergency_shutdown()
+                        safe_state = True
+                        _current_duty = 0.0
+                    await asyncio.sleep(0.1)
+                    continue
+
+            else:
+                # --- STRICT HTTP MODE ---
+                if grid_source != "HTTP":
+                    grid_source = "HTTP"
+                    d_u.print_and_store_log("SOLAR: HTTP grid source active")
+
+                # Wait for poll interval
+                if (now - _last_good_poll) >= poll_int:
+                    try:
+                        current_grid_power = await _get_shelly_power_async()
+                        last_shelly_error  = None
+                        _last_good_poll    = now
+                        if safe_state:
+                            d_u.print_and_store_log("SOLAR Shelly HTTP recovered — re-enabling relay")
+                            _relay.value(1)
+                            _pi.reset()
+                        safe_state         = False
+                        _safe_state_logged = False
+                    except Exception as err:
+                        last_shelly_error = str(err)
+                        if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
+                            if not _safe_state_logged:
+                                d_u.print_and_store_log("SOLAR WATCHDOG: Shelly HTTP unreachable — safe-state")
+                                _safe_state_logged = True
+                                _pi.reset()
+                            if not safe_state:
+                                _emergency_shutdown()
+                            safe_state    = True
+                            _current_duty = 0.0
+                else:
+                    await asyncio.sleep(0.1)
                     continue
 
             # ── Mode Selection ────────────────────────────────────────────
@@ -528,7 +590,11 @@ async def monitor_loop():
             # ── MQTT publish ──────────────────────────────────────────────────
             _publish_status_mqtt()
 
-            await asyncio.sleep(poll_int)
+            # Dynamic sleep: fast for MQTT, POLL_INTERVAL for HTTP
+            if getattr(c_v, 'E_SHELLY_MQTT', False) and grid_source == "MQTT":
+                await asyncio.sleep(0.5) # Fast check for new MQTT pushes
+            else:
+                await asyncio.sleep(poll_int)
             
         except Exception as err:
             d_u.print_and_store_log(f"SOLAR monitor loop critical error: {err}")

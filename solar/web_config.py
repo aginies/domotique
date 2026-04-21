@@ -70,6 +70,10 @@ def get_config():
         "WIFI_SUBNET": getattr(config_var, 'WIFI_SUBNET', ""),
         "WIFI_GATEWAY": getattr(config_var, 'WIFI_GATEWAY', ""),
         "WIFI_DNS": getattr(config_var, 'WIFI_DNS', ""),
+        "E_JSY": config_var.E_JSY,
+        "JSY_UART_ID": config_var.JSY_UART_ID,
+        "JSY_TX": config_var.JSY_TX,
+        "JSY_RX": config_var.JSY_RX,
         "VERSION": version,
     }
 
@@ -93,6 +97,8 @@ def serve_config_page(IP_ADDR, WS_PORT, reboot_needed=False):
         'ds18b20_no':        'selected' if config_var.E_DS18B20 is False  else '',
         'ssr_temp_yes':      'selected' if getattr(config_var, 'E_SSR_TEMP', False) is True  else '',
         'ssr_temp_no':       'selected' if getattr(config_var, 'E_SSR_TEMP', False) is False else '',
+        'jsy_yes':           'selected' if getattr(config_var, 'E_JSY', False) is True  else '',
+        'jsy_no':            'selected' if getattr(config_var, 'E_JSY', False) is False else '',
         'mqtt_yes':          'selected' if config_var.E_MQTT is True  else '',
         'mqtt_no':           'selected' if config_var.E_MQTT is False else '',
         'shelly_mqtt_yes':   'selected' if getattr(config_var, 'E_SHELLY_MQTT', False) is True  else '',

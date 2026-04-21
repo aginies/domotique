@@ -85,6 +85,7 @@ def status(request):
         "shelly_error": s_m.last_shelly_error,
         "water_temp": s_m.current_water_temp,
         "ssr_temp": s_m.current_ssr_temp,
+        "grid_source": s_m.grid_source,
         "mqtt_status": m_c.is_connected[0] if getattr(c_v, 'E_MQTT', False) is True else "disabled"
     }
     return ujson.dumps(data), 200, {"Content-Type": "application/json"}

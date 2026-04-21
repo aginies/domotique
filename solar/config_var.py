@@ -47,10 +47,12 @@ time_err = 0.3
 # Negative value = solar surplus exported to grid = available for equipment
 SHELLY_EM_IP = "192.168.1.100"
 E_SHELLY_MQTT = True     # If True, get grid power from MQTT (faster) instead of HTTP
+# set mqtt_update_period on shelly EM: http://192.168.1.100/Settings?mqtt_update_period=1
 SHELLY_MQTT_TOPIC = "shellies/homeassistant/emeter/0/power"
 FAKE_SHELLY = False        # If True, emulates a Shelly EM locally for testing
 
-POLL_INTERVAL = 30         # seconds between Shelly HTTP polls (fallback mode)
+POLL_INTERVAL = 2          # seconds between Shelly HTTP polls (fallback mode)
+
 
 # Equipment configuration
 EQUIPMENT_NAME = "ECS (EAU CHAUDE)"
@@ -105,8 +107,18 @@ E_SSR_TEMP = True          # Set to True to monitor SSR heatsink.
                            # it will be used for SSR temperature.
 SSR_MAX_TEMP = 75.0        # °C — safety cutoff if SSR heatsink gets too hot
 
-# Shelly watchdog: if no valid reading for this long, enter safe-state (equipment off)
-SHELLY_TIMEOUT = 10        # seconds
+# Shelly watchdog: if no valid reading for this long, enter safe-state (equipment off).
+# MQTT mode: set this to at least 3× the Shelly MQTT "Update period" (Shelly web UI →
+# Settings → MQTT → Update period).  With Shelly at 1 s → 10 s is safe.  With the
+# factory default of 30 s you will get a spurious safe-state every cycle — fix the
+# Shelly config, not this value.
+SHELLY_TIMEOUT = 10        # seconds — assumes Shelly MQTT period ≤ 3 s
+
+# JSY-MK-194 (Wired UART 2-channel power meter)
+E_JSY = False              # If True, use JSY via UART instead of Shelly (faster)
+JSY_UART_ID = 2
+JSY_TX = 17
+JSY_RX = 16
 
 # MQTT (optional)
 E_MQTT = True
