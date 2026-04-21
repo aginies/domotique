@@ -34,13 +34,25 @@ def deactivate_active_interfaces():
     gc.collect()
 
 def connect_to_wifi():
-    """ Connect to an existing network - reverted to stable version """
+    """ Connect to an existing network - support static IP """
     gc.collect()
     deactivate_active_interfaces()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.active():
         sta_if.active(True)
     
+    # Check for static IP configuration
+    static_ip = getattr(c_v, 'WIFI_STATIC_IP', None)
+    if static_ip:
+        subnet = getattr(c_v, 'WIFI_SUBNET', '255.255.255.0')
+        gateway = getattr(c_v, 'WIFI_GATEWAY', None)
+        dns = getattr(c_v, 'WIFI_DNS', gateway)
+        if gateway:
+            d_u.print_and_store_log(f"Setting static IP: {static_ip}")
+            sta_if.ifconfig((static_ip, subnet, gateway, dns))
+        else:
+            d_u.print_and_store_log("Static IP requested but WIFI_GATEWAY is missing! Falling back to DHCP.")
+
     d_u.print_and_store_log(f"Connecting to WiFi SSID: {c_v.WIFI_SSID}...")
     try:
         sta_if.connect(c_v.WIFI_SSID, c_v.WIFI_PASSWORD)
@@ -142,6 +154,14 @@ async def wifi_watchdog(check_interval_s=30, error_vars=None):
                 error_vars['Wifi Connection'] = True
             try:
                 sta_if.active(True)
+                # Static IP re-apply
+                static_ip = getattr(c_v, 'WIFI_STATIC_IP', None)
+                if static_ip:
+                    gateway = getattr(c_v, 'WIFI_GATEWAY', None)
+                    if gateway:
+                        subnet = getattr(c_v, 'WIFI_SUBNET', '255.255.255.0')
+                        dns = getattr(c_v, 'WIFI_DNS', gateway)
+                        sta_if.ifconfig((static_ip, subnet, gateway, dns))
                 sta_if.connect(c_v.WIFI_SSID, c_v.WIFI_PASSWORD)
             except OSError as err:
                 d_u.print_and_store_log(f"WIFI watchdog: connect error: {err}")

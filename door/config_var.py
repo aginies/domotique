@@ -24,6 +24,12 @@ E_WIFI = True # False
 WIFI_SSID = "WIFISSID"
 WIFI_PASSWORD = "WIFIPASSWORD"
 
+# WIFI STATIC IP (optional, set all 3 if you want static)
+# WIFI_STATIC_IP = "10.0.10.20"
+# WIFI_SUBNET = "255.255.255.0"
+# WIFI_GATEWAY = "10.0.10.1"
+# WIFI_DNS = "10.0.10.1"
+
 # WIFI AP
 AP_SSID = "W_Portail"
 AP_PASSWORD = '12345678'
