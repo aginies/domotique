@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solaire</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: Arial, sans-serif;
+            background-color: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 24px;
+            position: relative;
+        }}
+        h1 {{ color: #f0c040; font-size: 1.6em; }}
+        #dateTime {{ font-size: 0.9em; color: #aaa; margin-top: 4px; }}
+        
+        .mqtt-badge {{
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-top: 8px;
+            text-transform: uppercase;
+        }}
+        .mqtt-ok {{ background: #27ae60; color: #fff; }}
+        .mqtt-err {{ background: #e74c3c; color: #fff; }}
+        .mqtt-off {{ background: #555; color: #ccc; }}
+
+        .cards {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 24px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }}
+        .card {{
+            background: #16213e;
+            border-radius: 12px;
+            padding: 24px 16px;
+            flex: 1 1 180px;
+            min-width: 150px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }}
+        .chart-card {{
+            background: #16213e;
+            border-radius: 12px;
+            padding: 16px;
+            max-width: 800px;
+            margin: 0 auto 24px auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }}
+        .card .label {{
+            font-size: 0.85em;
+            color: #aaa;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        .card .value {{
+            font-size: 2em;
+            font-weight: bold;
+        }}
+        .card .unit {{ font-size: 0.7em; color: #aaa; margin-left: 4px; }}
+        .positive {{ color: #e74c3c; }}
+        .negative {{ color: #ff9800; }}
+        .neutral  {{ color: #f0c040; }}
+        .badge {{
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-top: 6px;
+        }}
+        .badge-on  {{ background: #27ae60; color: #fff; }}
+        .badge-off {{ background: #555; color: #ccc; }}
+        .badge-force {{ background: #e67e22; color: #fff; }}
+        .error-box {{
+            background: #c0392b;
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 16px;
+            display: none;
+        }}
+        .footer {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 24px;
+        }}
+        .footer a {{
+            background: #0f3460;
+            color: #eee;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }}
+        .footer a:hover {{ background: #1a5276; }}
+        .log-box {{
+            background: #0d0d1a;
+            border-radius: 8px;
+            padding: 12px;
+            height: 180px;
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            font-size: 0.78em;
+            font-family: monospace;
+            color: #ccc;
+            white-space: pre-wrap;
+            margin-top: 16px;
+            max-width: 800px;
+            margin: 16px auto 0 auto;
+            line-height: 1.4;
+        }}
+        .log-box::-webkit-scrollbar {{
+            display: none;
+        }}
+        .log-entry {{ display: block; margin-bottom: 2px; }}
+        .log-safety {{ color: #ff4d4d; font-weight: bold; }}
+        .log-error  {{ color: #ff4d4d; }}
+        .log-force  {{ color: #ffa500; }}
+        .log-ok     {{ color: #2ecc71; }}
+        .log-info   {{ color: #90EE90; }}
+        .log-dim    {{ color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Gestion Solaire</h1>
+        <div id="dateTime">--/--/---- --:--</div>
+        <div id="mqttStatus" class="mqtt-badge mqtt-off" style="display: none;">MQTT: --</div>
+    </div>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <div class="cards">
+        <div class="card">
+            <div class="label">Puissance réseau</div>
+            <div class="value" id="gridPower">—<span class="unit">W</span></div>
+        </div>
+        <div class="card">
+            <div class="label">{EQUIPMENT_NAME}</div>
+            <div class="value" id="equipmentPower">—<span class="unit">W</span></div>
+        </div>
+        <div class="card" id="ssrTempCard" style="display: none;">
+            <div class="label">Temp SSR</div>
+            <div class="value" id="ssrTemp">—<span class="unit">°C</span></div>
+        </div>
+        <div class="card">
+            <div class="label">Mode forcé</div>
+            <div id="forceMode"><span class="badge badge-off">Inactif</span></div>
+            <div style="margin-top: 12px;">
+                <form action="/boost" method="POST" style="display:flex; gap: 4px; justify-content: center;">
+                    <select name="min" style="padding: 4px; background: #0d0d1a; color: #eee; border: 1px solid #444; border-radius: 4px; font-size: 0.8em;">
+                        <option value="60" selected>1 h</option>
+                        <option value="120">2 h</option>
+                        <option value="180">3 h</option>
+                    </select>
+                    <button type="submit" class="badge badge-force" style="border:none; cursor:pointer; margin-top:0;">Boost</button>
+                </form>
+                <form action="/cancel_boost" method="POST" id="cancelBoostForm" style="display:none; margin-top:6px; justify-content: center;">
+                    <button type="submit" class="badge badge-off" style="border:none; cursor:pointer; margin-top:0;">Annuler Boost</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="chartCard" class="chart-card" style="display: none;">
+        <canvas id="powerChart"></canvas>
+    </div>
+
+    <div id="safeStateBox" class="error-box"></div>
+    <div class="log-box" id="logBox">Chargement...</div>
+
+    <div class="footer">
+        <a href="/web_config">Configuration</a>
+        <a href="/livelog">Live Log</a>
+        <a href="/file_management">Fichiers</a>
+        <a href="/RESET_device" onclick="return confirm('Redémarrer le device ?')">Reset</a>
+    </div>
+
+    <script>
+        let powerChart = null;
+
+        function updateDateTime() {{
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('fr-FR');
+            const timeStr = now.toLocaleTimeString('fr-FR', {{ hour: '2-digit', minute: '2-digit' }});
+            document.getElementById('dateTime').textContent = dateStr + ' ' + timeStr;
+        }}
+
+        async function updateStatus() {{
+            try {{
+                const r = await fetch('/status');
+                const d = await r.json();
+                
+                // Grid Power
+                const gp = d.grid_power;
+                const gpEl = document.getElementById('gridPower');
+                gpEl.innerHTML = gp.toFixed(1) + '<span class="unit">W</span>';
+                gpEl.className = 'value ' + (gp > 0 ? 'positive' : gp < 0 ? 'negative' : 'neutral');
+
+                // Equipment Power
+                const epEl = document.getElementById('equipmentPower');
+                epEl.innerHTML = d.equipment_power.toFixed(1) + '<span class="unit">W</span>';
+
+                // Force Mode & Boost
+                const fmEl = document.getElementById('forceMode');
+                fmEl.innerHTML = d.force_mode
+                    ? '<span class="badge badge-force">Forcé</span>'
+                    : '<span class="badge badge-off">Inactif</span>';
+                document.getElementById('cancelBoostForm').style.display =
+                    d.boost_active ? 'flex' : 'none';
+
+                // Temperatures
+                if (d.ssr_temp !== null && d.ssr_temp !== undefined) {{
+                    document.getElementById('ssrTempCard').style.display = 'block';
+                    document.getElementById('ssrTemp').innerHTML =
+                        d.ssr_temp.toFixed(1) + '<span class="unit">°C</span>';
+                }}
+
+                // Safe State
+                const ssBox = document.getElementById('safeStateBox');
+                ssBox.textContent = 'SAFE STATE: Shelly EM injoignable — redirigé coupé';
+                ssBox.style.display = d.safe_state ? 'block' : 'none';
+
+                // MQTT Status
+                const mqEl = document.getElementById('mqttStatus');
+                if (d.mqtt_status === "disabled") {{
+                    mqEl.style.display = "none";
+                }} else {{
+                    mqEl.style.display = "inline-block";
+                    if (d.mqtt_status === true) {{
+                        mqEl.textContent = "MQTT: Connecté";
+                        mqEl.className = "mqtt-badge mqtt-ok";
+                    }} else {{
+                        mqEl.textContent = "MQTT: Déconnecté";
+                        mqEl.className = "mqtt-badge mqtt-err";
+                    }}
+                }}
+
+                // Error Box
+                const errBox = document.getElementById('errorBox');
+                if (d.shelly_error && !d.safe_state) {{
+                    errBox.textContent = 'Erreur Shelly: ' + d.shelly_error;
+                    errBox.style.display = 'block';
+                }} else {{
+                    errBox.style.display = 'none';
+                }}
+            }} catch(e) {{
+                document.getElementById('errorBox').textContent = 'Erreur réseau: ' + e;
+                document.getElementById('errorBox').style.display = 'block';
+            }}
+        }}
+
+        async function updateLog() {{
+            try {{
+                const r = await fetch('/get_log_action');
+                const text = await r.text();
+                const lines = text.trim().split('\n');
+                const logBox = document.getElementById('logBox');
+
+                logBox.innerHTML = lines.map(line => {{
+                    let cls = '';
+                    const l = line.toUpperCase();
+
+                    if (l.includes('SAFETY') || l.includes('WATCHDOG')) cls = 'log-safety';
+                    else if (l.includes('ERROR')) cls = 'log-error';
+                    else if (l.includes('FORCE') || l.includes('BOOST')) cls = 'log-force';
+                    else if (l.includes('CONNECTED') || l.includes('ONLINE') || l.includes('BACK ONLINE')) cls = 'log-ok';
+                    else if (l.includes('[OFF]')) cls = 'log-dim';
+                    else if (l.includes('SOLAR')) cls = 'log-info';
+
+                    return `<span class="log-entry ${{cls}}">${{line}}</span>`;
+                }}).join('');
+
+                // Auto-scroll to bottom
+                logBox.scrollTop = logBox.scrollHeight;
+            }} catch(e) {{}}
+        }}
+
+
+        async function updateChart() {{
+            if (typeof Chart === 'undefined') return;
+            try {{
+                const r = await fetch('/history');
+                const history = await r.json();
+                if (!history || history.length === 0) return;
+
+                document.getElementById('chartCard').style.display = 'block';
+
+                const labels = history.map(p => {{
+                    const date = new Date(p.t * 1000);
+                    return date.getHours().toString().padStart(2, '0') + ':' + 
+                           date.getMinutes().toString().padStart(2, '0');
+                }});
+                const gridData = history.map(p => p.g);
+                const equipmentData  = history.map(p => p.e);
+                const ssrTempData = history.map(p => p.s);
+
+                if (!powerChart) {{
+                    const ctx = document.getElementById('powerChart').getContext('2d');
+                    powerChart = new Chart(ctx, {{
+                        type: 'line',
+                        data: {{
+                            labels: labels,
+                            datasets: [{{
+                                label: 'Réseau (W)',
+                                data: gridData,
+                                borderColor: '#ff9800',
+                                backgroundColor: 'rgba(255, 152, 0, 0.05)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 0,
+                                yAxisID: 'y',
+                                segment: {{
+                                    borderColor: function(ctx) {{
+                                        return (ctx.p0.parsed.y > 0 || ctx.p1.parsed.y > 0 ? '#e74c3c' : '#ff9800');
+                                    }}
+                                }}
+                            }}, {{
+                                label: 'Redirigé (W)',
+                                data: equipmentData,
+                                borderColor: '#2ecc71',
+                                backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 0,
+                                yAxisID: 'y'
+                            }}, {{
+                                label: 'Temp SSR (°C)',
+                                data: ssrTempData,
+                                borderColor: '#3498db',
+                                borderDash: [5, 5],
+                                fill: false,
+                                tension: 0.3,
+                                pointRadius: 0,
+                                yAxisID: 'y1'
+                            }}]
+                        }},
+                        options: {{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {{
+                                mode: 'index',
+                                intersect: false,
+                            }},
+                            plugins: {{
+                                legend: {{
+                                    labels: {{ color: '#ccc' }}
+                                }},
+                                tooltip: {{
+                                    enabled: true,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: '#f0c040',
+                                    bodyColor: '#eee',
+                                    borderColor: '#444',
+                                    borderWidth: 1,
+                                    padding: 10,
+                                    displayColors: true,
+                                    callbacks: {{
+                                        label: function(context) {{
+                                            const label = context.dataset.label || '';
+                                            const unit = label.includes('Temp') ? ' °C' : ' W';
+                                            return label + ': ' + context.parsed.y.toFixed(1) + unit;
+                                        }}
+                                    }}
+                                }}
+                            }},
+                            scales: {{
+                                x: {{
+                                    ticks: {{ color: '#999', maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }},
+                                    grid: {{ color: '#333' }}
+                                }},
+                                y: {{
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'left',
+                                    ticks: {{ color: '#999' }},
+                                    title: {{ display: true, text: 'Puissance (W)', color: '#999' }},
+                                    grid: {{ 
+                                        color: function(context) {{
+                                            return (context.tick.value === 0 ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.05)');
+                                        }},
+                                        lineWidth: function(context) {{
+                                            return (context.tick.value === 0 ? 2 : 1);
+                                        }}
+                                    }}
+                                }},
+                                y1: {{
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'right',
+                                    ticks: {{ color: '#3498db' }},
+                                    title: {{ display: true, text: 'Température (°C)', color: '#3498db' }},
+                                    grid: {{ drawOnChartArea: false }}
+                                }}
+                            }}
+                        }}
+                    }});
+                }} else {{
+                    powerChart.data.labels = labels;
+                    powerChart.data.datasets[0].data = gridData;
+                    powerChart.data.datasets[1].data = equipmentData;
+                    powerChart.data.datasets[2].data = ssrTempData;
+                    powerChart.update('none');
+                }}
+            }} catch(e) {{
+                console.error('Chart error:', e);
+            }}
+        }}
+
+        updateStatus();
+        updateLog();
+        updateChart();
+        updateDateTime();
+        setInterval(updateStatus, 2000);
+        setInterval(updateLog, 5000);
+        setInterval(updateChart, 5000);
+        setInterval(updateDateTime, 5000);
+    </script>
+</body>
+</html>

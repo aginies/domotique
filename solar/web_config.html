@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Solaire</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a2e;
+            color: #eee;
+        }}
+        h1, h2 {{ color: #f0c040; }}
+        .form-container {{
+            background-color: #16213e;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            max-width: 620px;
+            margin: 20px auto;
+        }}
+        .form-group {{ margin-bottom: 18px; }}
+        label {{
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #ccc;
+        }}
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select {{
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 15px;
+            background-color: #0d0d1a;
+            color: #eee;
+        }}
+        .section {{
+            background-color: #0f3460;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f0c040;
+        }}
+        .button-group {{
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }}
+        input[type="submit"] {{
+            background-color: #f0c040;
+            color: #1a1a2e;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 700;
+            flex-grow: 1;
+        }}
+        input[type="submit"]:hover {{ background-color: #d4a800; }}
+        .cancel-button {{
+            background-color: #555;
+            color: #eee;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            font-weight: 600;
+        }}
+        .reset-button {{
+            background-color: #c0392b;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            font-weight: 600;
+        }}
+        .reboot-banner {{
+            background-color: #e67e22;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>Configuration {NAME} ({VERSION})</h1>
+        {reboot_banner}
+        <form id="configForm" action="/save_config" method="POST">
+            <div class="form-group">
+                <label for="NAME">Nom du système</label>
+                <input type="text" id="NAME" name="NAME" value="{NAME}">
+            </div>
+
+            <div class="section">
+                <h2>Shelly EM</h2>
+                <div class="form-group">
+                    <label for="SHELLY_EM_IP">IP du Shelly EM:</label>
+                    <input type="text" id="SHELLY_EM_IP" name="SHELLY_EM_IP" value="{SHELLY_EM_IP}">
+                </div>
+                <div class="form-group">
+                    <label for="E_SHELLY_MQTT">Mode MQTT (plus rapide):</label>
+                    <select id="E_SHELLY_MQTT" name="E_SHELLY_MQTT">
+                        <option value="True"  {shelly_mqtt_yes}>Activé (reçoit les données via MQTT)</option>
+                        <option value="False" {shelly_mqtt_no}>Désactivé (utilise le mode HTTP standard)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="SHELLY_MQTT_TOPIC">Topic MQTT Shelly (ex: shellies/shellyem-XXXX/emeter/0/power):</label>
+                    <input type="text" id="SHELLY_MQTT_TOPIC" name="SHELLY_MQTT_TOPIC" value="{SHELLY_MQTT_TOPIC}">
+                </div>
+                <div class="form-group">
+                    <label for="POLL_INTERVAL">Intervalle de lecture HTTP (secondes):</label>
+                    <input type="number" id="POLL_INTERVAL" name="POLL_INTERVAL" value="{POLL_INTERVAL}">
+                </div>
+                <div class="form-group">
+                    <label for="EQUIPMENT_NAME">Nom de l'équipement:</label>
+                    <input type="text" id="EQUIPMENT_NAME" name="EQUIPMENT_NAME" value="{EQUIPMENT_NAME}">
+                </div>
+                <div class="form-group">
+                    <label for="EQUIPMENT_MAX_POWER">Puissance max équipement (watts):</label>
+                    <input type="number" id="EQUIPMENT_MAX_POWER" name="EQUIPMENT_MAX_POWER" value="{EQUIPMENT_MAX_POWER}">
+                </div>
+                <div class="form-group">
+                    <label for="POWER_BUFFER">Tampon avant activation (watts):</label>
+                    <input type="number" id="POWER_BUFFER" name="POWER_BUFFER" value="{POWER_BUFFER}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Contrôle PI</h2>
+                <div class="form-group">
+                    <label for="EXPORT_SETPOINT">Consigne réseau (W, 0 = zéro export):</label>
+                    <input type="number" id="EXPORT_SETPOINT" name="EXPORT_SETPOINT" value="{EXPORT_SETPOINT}">
+                </div>
+                <div class="form-group">
+                    <label for="PID_KP">Gain proportionnel Kp:</label>
+                    <input type="number" step="0.01" id="PID_KP" name="PID_KP" value="{PID_KP}">
+                </div>
+                <div class="form-group">
+                    <label for="PID_KI">Gain intégral Ki:</label>
+                    <input type="number" step="0.01" id="PID_KI" name="PID_KI" value="{PID_KI}">
+                </div>
+                <div class="form-group">
+                    <label for="BURST_PERIOD">Période burst SSR (secondes):</label>
+                    <input type="number" id="BURST_PERIOD" name="BURST_PERIOD" value="{BURST_PERIOD}">
+                </div>
+                <div class="form-group">
+                    <label for="MIN_POWER_THRESHOLD">Seuil minimum activation (W):</label>
+                    <input type="number" id="MIN_POWER_THRESHOLD" name="MIN_POWER_THRESHOLD" value="{MIN_POWER_THRESHOLD}">
+                </div>
+                <div class="form-group">
+                    <label for="MIN_OFF_TIME">Temps minimum OFF entre activations (s):</label>
+                    <input type="number" id="MIN_OFF_TIME" name="MIN_OFF_TIME" value="{MIN_OFF_TIME}">
+                </div>
+                <div class="form-group">
+                    <label for="SHELLY_TIMEOUT">Délai watchdog Shelly (s):</label>
+                    <input type="number" id="SHELLY_TIMEOUT" name="SHELLY_TIMEOUT" value="{SHELLY_TIMEOUT}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Sonde température (DS18B20) - Équipement</h2>
+                <div class="form-group">
+                    <label for="E_DS18B20">Activer la sonde équipement:</label>
+                    <select id="E_DS18B20" name="E_DS18B20">
+                        <option value="True"  {ds18b20_yes}>True</option>
+                        <option value="False" {ds18b20_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="DS18B20_PIN">Pin one-wire DS18B20:</label>
+                    <input type="number" id="DS18B20_PIN" name="DS18B20_PIN" value="{DS18B20_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="EQUIPMENT_MAX_TEMP">Température max sécurité équipement (°C):</label>
+                    <input type="number" step="0.5" id="EQUIPMENT_MAX_TEMP" name="EQUIPMENT_MAX_TEMP" value="{EQUIPMENT_MAX_TEMP}">
+                </div>
+                <div class="form-group">
+                    <label for="EQUIPMENT_TARGET_TEMP">Température cible mode forcé (°C):</label>
+                    <input type="number" step="0.5" id="EQUIPMENT_TARGET_TEMP" name="EQUIPMENT_TARGET_TEMP" value="{EQUIPMENT_TARGET_TEMP}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Sonde température (DS18B20) - SSR</h2>
+                <div class="form-group">
+                    <label for="E_SSR_TEMP">Activer la sonde SSR:</label>
+                    <select id="E_SSR_TEMP" name="E_SSR_TEMP">
+                        <option value="True"  {ssr_temp_yes}>True</option>
+                        <option value="False" {ssr_temp_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="SSR_MAX_TEMP">Température max sécurité SSR (°C):</label>
+                    <input type="number" step="0.5" id="SSR_MAX_TEMP" name="SSR_MAX_TEMP" value="{SSR_MAX_TEMP}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Mode Forcé Équipement</h2>
+                <div class="form-group">
+                    <label for="FORCE_EQUIPMENT">Activer le mode forcé manuel permanent:</label>
+                    <select id="FORCE_EQUIPMENT" name="FORCE_EQUIPMENT">
+                        <option value="True"  {force_equipment_yes}>True</option>
+                        <option value="False" {force_equipment_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="E_FORCE_WINDOW">Activer l'équipement à heure régulière:</label>
+                    <select id="E_FORCE_WINDOW" name="E_FORCE_WINDOW">
+                        <option value="True"  {force_window_yes}>True</option>
+                        <option value="False" {force_window_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="FORCE_START">Heure de début (HH:MM):</label>
+                    <input type="text" id="FORCE_START" name="FORCE_START" value="{FORCE_START}">
+                </div>
+                <div class="form-group">
+                    <label for="FORCE_END">Heure de fin (HH:MM):</label>
+                    <input type="text" id="FORCE_END" name="FORCE_END" value="{FORCE_END}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>MQTT</h2>
+                <div class="form-group">
+                    <label for="E_MQTT">Activer MQTT:</label>
+                    <select id="E_MQTT" name="E_MQTT">
+                        <option value="True"  {mqtt_yes}>True</option>
+                        <option value="False" {mqtt_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_IP">IP du serveur MQTT:</label>
+                    <input type="text" id="MQTT_IP" name="MQTT_IP" value="{MQTT_IP}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_PORT">Port MQTT:</label>
+                    <input type="number" id="MQTT_PORT" name="MQTT_PORT" value="{MQTT_PORT}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_USER">Utilisateur MQTT:</label>
+                    <input type="text" id="MQTT_USER" name="MQTT_USER" value="{MQTT_USER}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_PASSWORD">Mot de passe MQTT:</label>
+                    <input type="password" id="MQTT_PASSWORD" name="MQTT_PASSWORD" value="{MQTT_PASSWORD}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_NAME">Nom MQTT (préfixe topic):</label>
+                    <input type="text" id="MQTT_NAME" name="MQTT_NAME" value="{MQTT_NAME}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_RETAIN">MQTT Retain:</label>
+                    <select id="MQTT_RETAIN" name="MQTT_RETAIN">
+                        <option value="True"  {mqtt_retain_yes}>True</option>
+                        <option value="False" {mqtt_retain_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_KEEPALIVE">MQTT Keep-alive (secondes):</label>
+                    <input type="number" id="MQTT_KEEPALIVE" name="MQTT_KEEPALIVE" value="{MQTT_KEEPALIVE}">
+                </div>
+                <div class="form-group">
+                    <label for="MQTT_DISCOVERY_PREFIX">MQTT Discovery Prefix:</label>
+                    <input type="text" id="MQTT_DISCOVERY_PREFIX" name="MQTT_DISCOVERY_PREFIX" value="{MQTT_DISCOVERY_PREFIX}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>WiFi</h2>
+                <div class="form-group">
+                    <label for="E_WIFI">Utiliser un réseau existant:</label>
+                    <select id="E_WIFI" name="E_WIFI">
+                        <option value="True"  {external_wifi_yes}>True</option>
+                        <option value="False" {external_wifi_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_SSID">WiFi SSID:</label>
+                    <input type="text" id="WIFI_SSID" name="WIFI_SSID" value="{WIFI_SSID}">
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_PASSWORD">WiFi Password:</label>
+                    <input type="password" id="WIFI_PASSWORD" name="WIFI_PASSWORD" value="{WIFI_PASSWORD}">
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_STATIC_IP">Static IP (laisser vide pour DHCP):</label>
+                    <input type="text" id="WIFI_STATIC_IP" name="WIFI_STATIC_IP" value="{WIFI_STATIC_IP}">
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_SUBNET">Subnet Mask:</label>
+                    <input type="text" id="WIFI_SUBNET" name="WIFI_SUBNET" value="{WIFI_SUBNET}">
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_GATEWAY">Gateway:</label>
+                    <input type="text" id="WIFI_GATEWAY" name="WIFI_GATEWAY" value="{WIFI_GATEWAY}">
+                </div>
+                <div class="form-group">
+                    <label for="WIFI_DNS">DNS Server:</label>
+                    <input type="text" id="WIFI_DNS" name="WIFI_DNS" value="{WIFI_DNS}">
+                </div>
+                <div class="form-group">
+                    <label for="AP_SSID">AP SSID:</label>
+                    <input type="text" id="AP_SSID" name="AP_SSID" value="{AP_SSID}">
+                </div>
+                <div class="form-group">
+                    <label for="AP_PASSWORD">AP Password:</label>
+                    <input type="password" id="AP_PASSWORD" name="AP_PASSWORD" value="{AP_PASSWORD}">
+                </div>
+                <div class="form-group">
+                    <label for="AP_CHANNEL">AP Channel:</label>
+                    <input type="number" id="AP_CHANNEL" name="AP_CHANNEL" value="{AP_CHANNEL}">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Avancé</h2>
+                <div class="form-group">
+                    <label for="CPU_FREQ">Fréquence CPU ESP32:</label>
+                    <select id="CPU_FREQ" name="CPU_FREQ">
+                        <option value="20"  {selected_20}>20 MHz</option>
+                        <option value="40"  {selected_40}>40 MHz</option>
+                        <option value="80"  {selected_80}>80 MHz</option>
+                        <option value="160" {selected_160}>160 MHz</option>
+                        <option value="240" {selected_240}>240 MHz</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="I_LED_PIN">Internal LED Pin:</label>
+                    <input type="number" id="I_LED_PIN" name="I_LED_PIN" value="{I_LED_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="SSR_PIN">SSR Pin (PWM):</label>
+                    <input type="number" id="SSR_PIN" name="SSR_PIN" value="{SSR_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="RELAY_PIN">Relay Pin (enable circuit):</label>
+                    <input type="number" id="RELAY_PIN" name="RELAY_PIN" value="{RELAY_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="OLED_SCL_PIN">OLED SCL Pin:</label>
+                    <input type="number" id="OLED_SCL_PIN" name="OLED_SCL_PIN" value="{OLED_SCL_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="OLED_SDA_PIN">OLED SDA Pin:</label>
+                    <input type="number" id="OLED_SDA_PIN" name="OLED_SDA_PIN" value="{OLED_SDA_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="time_ok">LED OK Time (s):</label>
+                    <input type="number" step="0.1" id="time_ok" name="time_ok" value="{time_ok}">
+                </div>
+                <div class="form-group">
+                    <label for="time_err">LED Error Time (s):</label>
+                    <input type="number" step="0.1" id="time_err" name="time_err" value="{time_err}">
+                </div>
+            </div>
+
+            <div class="button-group">
+                <input type="submit" value="Sauvegarder">
+                <a href="/" class="cancel-button">Annuler</a>
+                <a href="/RESET_device" class="reset-button"
+                   onclick="return confirm('Redémarrer le device ?')">Reset Device</a>
+            </div>
+        </form>
+    </div>
+    <script>
+        const configForm = document.getElementById('configForm');
+        const configServerUrl = 'http://{IP_ADDR}:{WS_PORT}';
+        configForm.addEventListener('change', () => {{
+            configForm.action = configServerUrl + '/save_config/';
+        }});
+    </script>
+</body>
+</html>
