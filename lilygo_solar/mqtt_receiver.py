@@ -47,8 +47,7 @@ def draw_dashboard(data):
     ssr_t = data.get('water_temp', 'N/A')
     force = "ON" if data.get('force_mode') else "OFF"
     
-    _display.fill(st7789.BLACK)
-    _display.show()
+    # Single clear at start
     _display.fill(st7789.BLACK)
     
     # 1. ENEDIS (Huge)
@@ -81,8 +80,6 @@ def draw_dashboard(data):
 
 def draw_graph(mode):
     """ mode 1: Power, mode 2: Temp """
-    _display.fill(st7789.BLACK)
-    _display.show()
     _display.fill(st7789.BLACK)
     
     hist = history_p if mode == 1 else history_t
@@ -190,8 +187,6 @@ def _worker():
             is_connected[0] = False
             print("MQTT Worker Error:", e)
             if _display:
-                _display.fill(st7789.BLACK)
-                _display.show()
                 _display.fill(st7789.BLACK)
                 draw_huge_text(_display, "MQTT", 10, 20, st7789.RED)
                 draw_huge_text(_display, "OFFLINE", 10, 55, st7789.RED)

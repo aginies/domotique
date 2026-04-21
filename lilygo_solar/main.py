@@ -9,7 +9,7 @@ import config_var as c_v
 import st7789
 
 # Safe flags for main loop processing
-_btn_pressed = 0 # 0: none, 1: cycle, 2: offset
+_btn_pressed = False
 
 def main():
     global _btn_pressed
@@ -43,11 +43,11 @@ def main():
 
     def irq_btn1(pin):
         global _btn_pressed
-        _btn_pressed = 1
+        _btn_pressed = True
 
     def irq_btn2(pin):
         global _btn_pressed
-        _btn_pressed = 2
+        _btn_pressed = True
 
     btn1.irq(trigger=Pin.IRQ_FALLING, handler=irq_btn1)
     btn2.irq(trigger=Pin.IRQ_FALLING, handler=irq_btn2)
@@ -74,16 +74,11 @@ def main():
             d_u._rotate_log_if_needed(paths.LOG_FILE, 40 * 1024)
 
         # Process button clicks safely outside of IRQ
-        if _btn_pressed > 0:
+        if _btn_pressed:
             now = utime.ticks_ms()
             if utime.ticks_diff(now, last_press) > 300:
-                if _btn_pressed == 1:
-                    mqtt_receiver.screen_mode = (mqtt_receiver.screen_mode + 1) % 3
-                    print("Mode:", mqtt_receiver.screen_mode)
-                elif _btn_pressed == 2 and display:
-                    display.y_offset = (display.y_offset + 5)
-                    if display.y_offset > 80: display.y_offset = 30
-                    print("Offset:", display.y_offset)
+                mqtt_receiver.screen_mode = (mqtt_receiver.screen_mode + 1) % 3
+                print("Mode Cycle:", mqtt_receiver.screen_mode)
                 
                 # Redraw
                 if mqtt_receiver.last_data:
@@ -92,7 +87,7 @@ def main():
                     elif mqtt_receiver.screen_mode == 2: mqtt_receiver.draw_graph(2)
                 
                 last_press = now
-            _btn_pressed = 0 # Reset flag
+            _btn_pressed = False # Reset flag
 
         utime.sleep_ms(50) # Fast poll, very low CPU usage
 
