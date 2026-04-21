@@ -3,15 +3,25 @@
 
 """ Web command page """
 import config_var as c_v
+import paths
+import domo_utils as d_u
 
 def create_html_response():
     """ Créer la réponse HTML """
+    device_name = getattr(c_v, 'NAME', getattr(c_v, 'DOOR', 'Device'))
+    try:
+        with open(paths.VERSION_FILE, 'r') as file:
+            version = file.read().strip()
+    except OSError:
+        version = "unknown"
+    current_date = d_u.show_rtc_date()
+
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contrôle</title>
+    <title>Contrôle {device_name}</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -104,8 +114,8 @@ def create_html_response():
 </head>
 <body>
     <div class="container">
-        <h1>Contrôle """+c_v.DOOR+"""</h1>
-        <p>Toujours <b>contrôler</b> visuellement le <b>"""+c_v.DOOR+"""</b></p>
+        <h1>Contrôle {device_name}</h1>
+        <p>Toujours <b>contrôler</b> visuellement le <b>{device_name}</b></p>
         <button id="BP1" class="button">BP1</button>
         <div id="timestamp"></div>
         <div id="user-agent"></div>
@@ -124,6 +134,9 @@ def create_html_response():
             document.getElementById('timestamp').textContent = 'Dernier clic: ' + timestamp;
         });
     </script>
+    <div style="text-align: center; margin-top: 20px; font-size: 0.8em; color: #999; border-top: 1px solid #eee; padding-top: 10px;">
+        Version: {version} - {current_date}
+    </div>
     </div>
     <div class="footer">
         <div class="footer-buttons">

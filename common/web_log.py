@@ -7,12 +7,13 @@ import paths
 
 def create_log_page():
     """ Creates the HTML page for viewing the log with auto-refresh. """
+    device_name = getattr(c_v, 'NAME', getattr(c_v, 'DOOR', 'Device'))
     html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log {c_v.DOOR}</title>
+    <title>Log {device_name}</title>
     <style>
         body {{
             font-family: Arial, sans-serif;

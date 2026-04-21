@@ -287,7 +287,8 @@ def main():
 
     # Read the initial state of the door sensor
     door_state = door_sensor.value()
-    d_u.print_and_store_log(f"Information {c_v.DOOR}:")
+    device_name = getattr(c_v, 'NAME', getattr(c_v, 'DOOR', 'Device'))
+    d_u.print_and_store_log(f"Information {device_name}:")
     if door_state == 0:
         statusd = "Status: OUVERT"
         led.value(1)

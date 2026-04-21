@@ -6,22 +6,36 @@
 import network
 import utime
 import asyncio
-import oled_ssd1306 as o_s
-import esp32_led as e_l
+import gc
+try:
+    import oled_ssd1306 as o_s
+except ImportError:
+    o_s = None
+
+try:
+    import esp32_led as e_l
+except ImportError:
+    e_l = None
 import config_var as c_v
 import domo_utils as d_u
 
 def deactivate_active_interfaces():
     """ Disable network interface """
-    sta_if = network.WLAN(network.STA_IF)
-    if sta_if.active():
-        sta_if.active(False)
-    ap_if = network.WLAN(network.AP_IF)
-    if ap_if.active():
-        ap_if.active(False)
+    gc.collect()
+    try:
+        sta_if = network.WLAN(network.STA_IF)
+        if sta_if.active():
+            sta_if.active(False)
+        ap_if = network.WLAN(network.AP_IF)
+        if ap_if.active():
+            ap_if.active(False)
+    except Exception as e:
+        d_u.print_and_store_log(f"Error deactivating WiFi: {e}")
+    gc.collect()
 
 def connect_to_wifi():
     """ Connect to an existing network - reverted to stable version """
+    gc.collect()
     deactivate_active_interfaces()
     sta_if = network.WLAN(network.STA_IF)
     if not sta_if.active():
@@ -40,11 +54,11 @@ def connect_to_wifi():
         attempt += 1
         info = f"Connect Wifi {attempt}/{max_attempts}"
         d_u.print_and_store_log(info)
-        if o_s.oled_d:
+        if o_s and o_s.oled_d:
             o_s.oled_show_text_line(info, 10)
         utime.sleep(3)
 
-    if o_s.oled_d:
+    if o_s and o_s.oled_d:
         o_s.oled_d.fill(1)
         o_s.oled_d.show()
         utime.sleep(0.1)
@@ -61,20 +75,25 @@ def connect_to_wifi():
         config = sta_if.ifconfig()
         d_u.print_and_store_log(f"Connected to {c_v.WIFI_SSID}!")
         d_u.print_and_store_log(f"IP: {config[0]}, Gateway: {config[2]}")
-        e_l.internal_led_blink(e_l.white, e_l.led_off, 3, c_v.time_ok)
+        if e_l:
+            e_l.internal_led_blink(e_l.white, e_l.led_off, 3, c_v.time_ok)
         return {'success': True, 'ip_address': config[0]}
     else:
         d_u.print_and_store_log("WiFi Connection Failed!")
-        e_l.internal_led_blink(e_l.white, e_l.led_off, 5, c_v.time_err)
+        if e_l:
+            e_l.internal_led_blink(e_l.white, e_l.led_off, 5, c_v.time_err)
         d_u.print_and_store_log("Falling back to Access Point mode")
         return {'success': False, 'ERR_WIFI': True}
     
 def setup_access_point():
     """ AP configuration """
+    gc.collect()
     deactivate_active_interfaces()
     try:
         ap = network.WLAN(network.AP_IF)
-        ap.active(True)
+        if not ap.active():
+            ap.active(True)
+        gc.collect()
         # Configurer le point d'accès
         ap.ifconfig(c_v.AP_IP)
         ap.config(essid=c_v.AP_SSID,
@@ -91,17 +110,19 @@ def setup_access_point():
             attempt += 1
             info = f"Starting AP {attempt}/{max_attempts}"
             d_u.print_and_store_log(info)
-            if o_s.oled_d:
+            if o_s and o_s.oled_d:
                 o_s.oled_show_text_line(info, 10)
             utime.sleep(1)
 
         if ap.active():
             d_u.print_and_store_log(f'WIFI Access Point active! IP: {ap.ifconfig()[0]}')
-            e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
+            if e_l:
+                e_l.internal_led_blink(e_l.blue, e_l.led_off, 3, c_v.time_ok)
         return ap
     except OSError as err:
         d_u.print_and_store_log(f"AP Setup Error: {err}")
-        e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
+        if e_l:
+            e_l.internal_led_blink(e_l.blue, e_l.led_off, 5, c_v.time_err)
         return None
 
 async def wifi_watchdog(check_interval_s=30, error_vars=None):

@@ -95,22 +95,34 @@ def delete_files_with_extension(target_dir, extension):
     print_and_store_log(f"Finished deleting {extension} files.")
 
 def _rotate_log_if_needed(filename, max_bytes):
-    """ Rename filename to filename + '.1' once it exceeds max_bytes. Keeps one generation. """
+    """ 
+    Rotate logs: log.txt -> log.txt.1 -> log.txt.2 -> (deleted)
+    Keeps two generations.
+    """
     try:
         size = os.stat(filename)[6]
     except OSError:
         return
     if size < max_bytes:
         return
-    rotated = filename + ".1"
+
+    # Cycle generations
+    rotated2 = filename + ".2"
+    rotated1 = filename + ".1"
+    
     try:
-        os.remove(rotated)
+        os.remove(rotated2)
     except OSError:
         pass
+        
     try:
-        os.rename(filename, rotated)
+        os.rename(rotated1, rotated2)
+    except OSError:
+        pass
+
+    try:
+        os.rename(filename, rotated1)
     except OSError as err:
-        # Use bare print: print_and_store_log would re-enter store_log.
         print(f"log rotation failed for {filename}: {err}")
 
 def store_log(text_data, filename=paths.LOG_FILE):

@@ -31,6 +31,23 @@ Control a Pool shutter
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/pool_log.jpg)
 ![image](https://raw.githubusercontent.com/aginies/domotique/refs/heads/main/images/file_management.jpg)
 
+# solar
+
+Divert solar surplus power to a resistive load (e.g. hot water tank / ballon d'eau chaude)
+
+* Polls a **Shelly EM** (Gen1) for real-time net grid power
+* **PI controller** (tunable Kp/Ki) drives a **SSR** via burst-fire to absorb exactly the surplus
+* **Relay** protects the SSR and enables emergency shutdown
+* **Force mode**: scheduled time window or manual override to run at full power regardless of surplus
+* **Boost mode**: one-shot full-power run for a configurable duration
+* **DS18B20** temperature sensor support — safety cutoff and target temperature for force/boost
+* **MQTT** classic publish of grid power, equipment power, duty cycle and temperature
+* Display all relevant **informations** on a 0.96" **oled screen** (optional)
+* **Live log** available
+* **Files management**
+* **Configuration** using a web interface (PID gains, burst period, thresholds, MQTT…)
+* **Update** support via an **update.bin** file
+
 # parking_detection
 
 Get a flash light which indicate the distance between the wall and the car
