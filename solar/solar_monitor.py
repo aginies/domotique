@@ -5,6 +5,7 @@ import asyncio
 import ujson
 import utime
 import esp32
+import gc
 from machine import Pin
 
 import config_var as c_v
@@ -23,6 +24,7 @@ current_ssr_temp = None    # °C from DS18B20 on heatsink, None if not available
 fan_active = False         # SSR Cooling fan status
 fan_percent = 0            # SSR Cooling fan speed percentage (0-100)
 grid_source = "MQTT"       # "MQTT" or "HTTP"
+night_mode = False         # True between 22:00 and 05:50
 boost_end_time = 0         # utime.time() when boost expires
 power_history = []         # Rolling buffer of last 5 minutes (60 points)
 
@@ -39,6 +41,19 @@ _last_data_log_time = 0    # utime.time() of last solar_data.txt write
 _last_pi_time = 0          # utime.ticks_ms() of last PI update
 _last_temp_read = 0        # utime.time() of last DS18B20 read
 _in_surplus = False        # True when grid was negative last iteration (surplus zone)
+
+# Statistics & Flash Protection state
+_solar_data_buffer = []    # RAM buffer for solar_data.txt
+_total_import_Wh = 0.0     # Today's grid import (Wh)
+_total_redirect_Wh = 0.0   # Today's equipment redirected energy (Wh)
+_hourly_import_Wh = [0.0] * 24
+_hourly_redirect_Wh = [0.0] * 24
+_total_export_Wh = 0.0     # Today's grid export (Wh)
+_hourly_export_Wh = [0.0] * 24
+_active_heating_secs = 0   # Today's active heating time (seconds)
+_last_stats_save = 0       # utime.time() of last stats.json write
+_midnight_reset_done = False # Latch for daily reset
+STATS_FILE = "stats.json"
 
 
 # ── PI controller ────────────────────────────────────────────────────────────
@@ -92,6 +107,110 @@ def init_ssr_relay():
     d_u.print_and_store_log(
         f"SSR pin={c_v.SSR_PIN} (digital), Relay pin={c_v.RELAY_PIN} initialized (relay ON)"
     )
+
+
+# ── Statistics Management ───────────────────────────────────────────────────
+
+def _load_stats():
+    """ Load current day totals from stats.json to resume after reboot. """
+    global _total_import_Wh, _total_redirect_Wh, _hourly_import_Wh, _hourly_redirect_Wh
+    global _total_export_Wh, _hourly_export_Wh, _active_heating_secs
+    if not d_u.file_exists(STATS_FILE):
+        return
+    try:
+        with open(STATS_FILE, "r") as f:
+            stats = ujson.load(f)
+        today = d_u.show_rtc_date()
+        if today in stats:
+            day_data = stats[today]
+            _total_import_Wh = day_data.get("import", 0.0)
+            _total_redirect_Wh = day_data.get("redirect", 0.0)
+            _total_export_Wh = day_data.get("export", 0.0)
+            _active_heating_secs = day_data.get("active_time", 0)
+            
+            # Load hourly data if present
+            h_imp = day_data.get("h_import")
+            if h_imp and len(h_imp) == 24:
+                _hourly_import_Wh = h_imp
+            h_red = day_data.get("h_redirect")
+            if h_red and len(h_red) == 24:
+                _hourly_redirect_Wh = h_red
+            h_exp = day_data.get("h_export")
+            if h_exp and len(h_exp) == 24:
+                _hourly_export_Wh = h_exp
+                
+            d_u.print_and_store_log(f"STATS: Resumed today ({today}) totals from file")
+    except Exception as e:
+        d_u.print_and_store_log(f"STATS: Load error: {e}")
+
+def _save_stats_to_file():
+    """ Update stats.json with current totals. Keeps a rolling 365-day window. """
+    global _total_import_Wh, _total_redirect_Wh, _hourly_import_Wh, _hourly_redirect_Wh
+    global _total_export_Wh, _hourly_export_Wh, _active_heating_secs
+    today = d_u.show_rtc_date()
+    # Check if year is valid (NTP synced), avoid logging to 2000-01-01
+    if today.startswith("2000"):
+        return
+
+    stats = {}
+    if d_u.file_exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r") as f:
+                stats = ujson.load(f)
+        except:
+            pass
+
+    # Update or add today's entry
+    stats[today] = {
+        "import": round(_total_import_Wh, 1),
+        "redirect": round(_total_redirect_Wh, 1),
+        "export": round(_total_export_Wh, 1),
+        "active_time": int(_active_heating_secs),
+        "h_import": [round(x, 1) for x in _hourly_import_Wh],
+        "h_redirect": [round(x, 1) for x in _hourly_redirect_Wh],
+        "h_export": [round(x, 1) for x in _hourly_export_Wh]
+    }
+
+    # Prune hourly data older than 8 days to save flash and RAM
+    # This keeps the "1 week with more details" while preserving system resources
+    sorted_keys = sorted(stats.keys())
+    if len(sorted_keys) > 8:
+        for k in sorted_keys[:-8]:
+            if "h_import" in stats[k]: del stats[k]["h_import"]
+            if "h_redirect" in stats[k]: del stats[k]["h_redirect"]
+            if "h_export" in stats[k]: del stats[k]["h_export"]
+
+    # Rolling window: 365 days
+    if len(stats) > 365:
+        sorted_keys = sorted(stats.keys()) # Refresh keys after potential deletion
+        while len(stats) > 365:
+            oldest = sorted_keys.pop(0)
+            del stats[oldest]
+            d_u.print_and_store_log(f"STATS: Removed oldest record: {oldest}")
+
+    try:
+        with open(STATS_FILE, "w") as f:
+            ujson.dump(stats, f)
+    except Exception as e:
+        d_u.print_and_store_log(f"STATS: Save error: {e}")
+
+def _flush_solar_data():
+    """ Writes buffered solar data to flash and handles rotation. """
+    global _solar_data_buffer
+    if not _solar_data_buffer:
+        return
+    
+    filename = "solar_data.txt"
+    try:
+        # Clean up old data file if it gets massive (100KB)
+        if d_u.file_exists(filename):
+             d_u._rotate_log_if_needed(filename, 100 * 1024)
+        
+        with open(filename, "a") as f:
+            f.write("\n".join(_solar_data_buffer) + "\n")
+        _solar_data_buffer = []
+    except Exception as e:
+        print(f"Failed to flush solar data: {e}")
 
 
 # ── DS18B20 temperature sensor ────────────────────────────────────────────────
@@ -373,9 +492,14 @@ async def monitor_loop():
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
     global current_water_temp, current_ssr_temp, grid_source, _last_data_log_time, _last_pi_time
     global _last_temp_read, fan_active, fan_percent, _in_surplus, _jsy
+    global _total_import_Wh, _total_redirect_Wh, _hourly_import_Wh, _hourly_redirect_Wh
+    global _total_export_Wh, _hourly_export_Wh, _active_heating_secs, _last_stats_save
+    global _solar_data_buffer, night_mode, _midnight_reset_done
 
     _init_ds18b20()
+    _load_stats()
     _last_good_poll = utime.time()
+    _last_stats_save = utime.time()
 
     # Ensure MQTT worker is running when Shelly MQTT is the grid source,
     # even if E_MQTT (status publishing) is disabled.
@@ -387,7 +511,37 @@ async def monitor_loop():
     while True:
         try:
             now = utime.time()
+            # Timezone-aware minutes since midnight (Paris)
+            curr_min = d_u.get_paris_time_minutes()
+            
+            # Night mode logic
+            n_start_str = getattr(c_v, 'NIGHT_START', "22:00")
+            n_end_str = getattr(c_v, 'NIGHT_END', "05:50")
+            
+            # Use _time_to_minutes to handle HH:MM parsing
+            night_start = _time_to_minutes(n_start_str)
+            night_end = _time_to_minutes(n_end_str)
+            
+            if night_start < night_end:
+                is_night = (night_start <= curr_min < night_end)
+            else: # Overnight range (e.g. 22:00 to 06:00)
+                is_night = (curr_min >= night_start or curr_min < night_end)
+            
+            if is_night != night_mode:
+                night_mode = is_night
+                d_u.print_and_store_log(f"SOLAR: {'Entering' if is_night else 'Leaving'} Night Mode")
+                if not night_mode:
+                    # Leaving night mode: ensure relay is ready and PI is fresh
+                    _relay.value(1)
+                    _pi.reset()
+
             poll_int = getattr(c_v, 'POLL_INTERVAL', 2)
+            if night_mode:
+                poll_int = getattr(c_v, 'NIGHT_POLL_INTERVAL', 15)
+            
+            # Dynamic watchdog: must be at least poll_int * 3 to allow for network jitters
+            watchdog_timeout = max(getattr(c_v, 'SHELLY_TIMEOUT', 10), poll_int * 3)
+            
             max_p = float(getattr(c_v, 'EQUIPMENT_MAX_POWER', 2000))
             status_tag = "WAIT"
             surplus = 0.0
@@ -486,7 +640,7 @@ async def monitor_loop():
                     safe_state = False
                 else:
                     # JSY error: wait for next poll
-                    if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
+                    if (now - _last_good_poll) >= watchdog_timeout:
                         if not _safe_state_logged:
                             d_u.print_and_store_log("SOLAR WATCHDOG: JSY-MK-194 timeout — safe-state")
                             _safe_state_logged = True
@@ -498,12 +652,15 @@ async def monitor_loop():
                     continue
 
             # 2. Try MQTT if enabled and JSY not used
-            if use_shelly and getattr(c_v, 'E_SHELLY_MQTT', False):
-                # --- STRICT MQTT MODE ---
+            if getattr(c_v, 'E_SHELLY_MQTT', False):
+                # --- MQTT SOURCE ---
                 mqtt_val = m_c.latest_mqtt_grid_power[0]
-                if mqtt_val is not None:
-                    # Fresh data received: consume and fall through to PI logic
+                # In night mode, we only process MQTT data if poll_int (60s) has passed
+                time_since_poll = now - _last_good_poll
+                if mqtt_val is not None and (not night_mode or time_since_poll >= poll_int):
+                    # Fresh data received or interval reached: consume
                     m_c.latest_mqtt_grid_power[0] = None
+
                     if grid_source != "MQTT":
                         d_u.print_and_store_log("SOLAR: MQTT grid source active")
                     grid_source = "MQTT"
@@ -518,7 +675,7 @@ async def monitor_loop():
                     safe_state = False
                 else:
                     # No new data: check for timeout then skip PI logic
-                    if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
+                    if (now - _last_good_poll) >= watchdog_timeout:
                         if not _safe_state_logged:
                             d_u.print_and_store_log("SOLAR WATCHDOG: No MQTT data from Shelly — safe-state")
                             _safe_state_logged = True
@@ -550,7 +707,7 @@ async def monitor_loop():
                         _safe_state_logged = False
                     except Exception as err:
                         last_shelly_error = str(err)
-                        if (now - _last_good_poll) >= getattr(c_v, 'SHELLY_TIMEOUT', 10):
+                        if (now - _last_good_poll) >= watchdog_timeout:
                             if not _safe_state_logged:
                                 d_u.print_and_store_log("SOLAR WATCHDOG: Shelly HTTP unreachable — safe-state")
                                 _safe_state_logged = True
@@ -668,6 +825,58 @@ async def monitor_loop():
                     else:
                         status_tag = "OFF(PI)"
                         _pi.reset()
+                
+                # ── Energy Accumulation (Wh) ──────────────────────────────────
+                # dt is the time in seconds since last loop
+                if dt > 0 and dt < 60: # Avoid spikes from large time jumps
+                    curr_hour = (curr_min // 60) % 24
+                    # 1. Grid import (only when grid > 0)
+                    if current_grid_power > 0:
+                        # Wh = Watts * (seconds / 3600)
+                        delta = current_grid_power * (dt / 3600.0)
+                        _total_import_Wh += delta
+                        _hourly_import_Wh[curr_hour] += delta
+                    # 2. Grid export (only when grid < 0)
+                    elif current_grid_power < 0:
+                        delta = -current_grid_power * (dt / 3600.0)
+                        _total_export_Wh += delta
+                        _hourly_export_Wh[curr_hour] += delta
+                    
+                    # 3. Redirected power
+                    if equipment_power > 0:
+                        delta = equipment_power * (dt / 3600.0)
+                        _total_redirect_Wh += delta
+                        _hourly_redirect_Wh[curr_hour] += delta
+                        _active_heating_secs += dt
+
+            # ── Stats & Log Periodic Flush ──────────────────────────────────
+            # 1. Save stats to JSON every 15 minutes (or on day change)
+            if (now - _last_stats_save) >= 900:
+                _save_stats_to_file()
+                _last_stats_save = now
+            
+            # Reset daily counters at midnight (00:00 to 00:01)
+            if curr_min == 0:
+                if not _midnight_reset_done:
+                    d_u.print_and_store_log("STATS: Midnight - saving and resetting daily counters")
+                    _save_stats_to_file()
+                    _total_import_Wh = 0.0
+                    _total_redirect_Wh = 0.0
+                    _total_export_Wh = 0.0
+                    _hourly_import_Wh = [0.0] * 24
+                    _hourly_redirect_Wh = [0.0] * 24
+                    _hourly_export_Wh = [0.0] * 24
+                    _active_heating_secs = 0
+                    _midnight_reset_done = True
+                    
+                    # Periodic NTP sync to avoid clock drift (once per day)
+                    if getattr(c_v, 'E_WIFI', False):
+                        try:
+                            d_u.set_time_with_ntp()
+                        except:
+                            pass
+            else:
+                _midnight_reset_done = False
 
             # --- Selective Logging ---
             log_msg = (
@@ -680,31 +889,34 @@ async def monitor_loop():
             # 1. Print to console (always)
             print(utime.time(), ": ", log_msg)
             
-            # 2. Write to solar_data.txt (every 1 minute)
+            # 2. Store to RAM buffer (every 1 minute)
             if log_msg and (now - _last_data_log_time) >= 60:
-                try:
-                    # Clean up old data file if it gets massive
-                    if d_u.file_exists("solar_data.txt"):
-                         d_u._rotate_log_if_needed("solar_data.txt", 100 * 1024)
-                    
-                    with open("solar_data.txt", "a") as f:
-                        curr_date = d_u.show_rtc_date()
-                        h, m, s = d_u.show_rtc_time()
-                        curr_time = "{:02d}:{:02d}:{:02d}".format(h, m, s)
-                        f.write(f"{curr_date} {curr_time}: {log_msg}\n")
-                    _last_data_log_time = now
-                except:
-                    pass
+                curr_date = d_u.show_rtc_date()
+                h, m, s = d_u.show_rtc_time()
+                curr_time = "{:02d}:{:02d}:{:02d}".format(h, m, s)
+                _solar_data_buffer.append(f"{curr_date} {curr_time}: {log_msg}")
+                _last_data_log_time = now
+            
+            # 3. Periodic flush of all logs to flash (every 15 minutes)
+            if (now % 900) < (poll_int + 1):
+                _flush_solar_data()
+                d_u.flush_logs()
 
             # ── MQTT publish ──────────────────────────────────────────────────
             _publish_status_mqtt()
 
-            # Dynamic sleep: fast for MQTT, POLL_INTERVAL for HTTP
-            if getattr(c_v, 'E_SHELLY_MQTT', False) and grid_source == "MQTT":
+            # Dynamic sleep: fast for MQTT, POLL_INTERVAL for HTTP.
+            # In Night Mode, always use poll_int (60s).
+            if night_mode:
+                await asyncio.sleep(poll_int)
+            elif getattr(c_v, 'E_SHELLY_MQTT', False) and grid_source == "MQTT":
                 await asyncio.sleep(0.5) # Fast check for new MQTT pushes
             else:
                 await asyncio.sleep(poll_int)
-            
+
+            # --- Heap RAM cleanup (CRITICAL for long-term stability) ---
+            gc.collect()
+
         except Exception as err:
             d_u.print_and_store_log(f"SOLAR monitor loop critical error: {err}")
             await asyncio.sleep(5)
