@@ -204,18 +204,12 @@ def reset_device(request):
     s_m._save_stats_to_file()
     s_m._flush_solar_data()
     d_u.flush_logs()
-    d_u.perform_reset()
-    return "Resetting...", 200
+    _thread.start_new_thread(d_u.perform_reset, ())
+    return "<html><h1>Reset!</h1><h2>Fermez cette page</h2></html>", 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/file_management')
 def file_management(request):
     return w_f_m.serve_file_management_page(), 200, {"Content-Type": "text/html"}
-
-@ws_app.route('/RESET_device')
-def reset_device(request):
-    d_u.print_and_store_log("Reset button pressed")
-    _thread.start_new_thread(d_u.perform_reset, ())
-    return "<html><h1>Reset!</h1><h2>Fermez cette page</h2></html>", 200, {"Content-Type": "text/html"}
 
 @ws_app.route('/wifi_setup', methods=['GET', 'POST'])
 def wifi_setup(request):

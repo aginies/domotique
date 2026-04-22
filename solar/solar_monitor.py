@@ -567,11 +567,12 @@ async def monitor_loop():
                 
                 # SSR Fan Control Logic (PWM 4-pin fan)
                 if getattr(c_v, 'E_FAN', False) and current_ssr_temp is not None:
-                    # 0% until 50°C, then 50%, then 100% at 60°C
+                    _fan_max  = float(getattr(c_v, 'SSR_MAX_TEMP', 75.0))
+                    _fan_low  = _fan_max - float(getattr(c_v, 'FAN_TEMP_OFFSET', 10))
                     new_percent = 0
-                    if current_ssr_temp >= 60.0:
+                    if current_ssr_temp >= _fan_max:
                         new_percent = 100
-                    elif current_ssr_temp >= 50.0:
+                    elif current_ssr_temp >= _fan_low:
                         new_percent = 50
                     
                     if new_percent != fan_percent:
@@ -620,7 +621,7 @@ async def monitor_loop():
             if getattr(c_v, 'E_JSY', False):
                 # Import and Init on first run
                 global _jsy
-                if '_jsy' not in globals():
+                if _jsy is None:
                     from jsy_mk194 import JSY_MK194
                     _jsy = JSY_MK194(c_v.JSY_UART_ID, c_v.JSY_TX, c_v.JSY_RX)
                     d_u.print_and_store_log("SOLAR: JSY-MK-194 initialized")

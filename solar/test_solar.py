@@ -209,6 +209,7 @@ _domo_utils_mod._rotate_log_if_needed = lambda f, s: None
 _domo_utils_mod.flush_logs = lambda: None
 _domo_utils_mod.show_rtc_date = lambda: "2024-06-01"
 _domo_utils_mod.show_rtc_time = lambda: (12, 0, 0)
+_domo_utils_mod.get_paris_time_minutes = lambda: 12 * 60  # noon default
 sys.modules["domo_utils"] = _domo_utils_mod
 
 # save_config mock
@@ -284,6 +285,7 @@ class _Cfg:
     MQTT_USER        = ""
     MQTT_PASSWORD    = ""
     MQTT_NAME        = "solar"
+    NIGHT_POLL_INTERVAL = 15
 
 _cfg = _Cfg()
 _cfg_mod = types.ModuleType("config_var")
@@ -1225,31 +1227,35 @@ section("SSR Temperature Logic")
 def test_ssr_fan_thresholds():
     _reset_monitor()
     _cfg_mod.E_FAN = True
-    
+    _cfg_mod.SSR_MAX_TEMP = 75.0
+    _cfg_mod.FAN_TEMP_OFFSET = 10
+    fan_low  = _cfg_mod.SSR_MAX_TEMP - _cfg_mod.FAN_TEMP_OFFSET  # 65°C
+    fan_high = _cfg_mod.SSR_MAX_TEMP                              # 75°C
+
     class MockPWM:
         def __init__(self): self.duty = 0
         def duty_u16(self, v): self.duty = v
     sm._fan_pin = MockPWM()
     sm.fan_percent = 0
-    
-    # 1. Below 50°C -> 0%
-    sm.current_ssr_temp = 45.0
+
+    # 1. Below low threshold -> 0%
+    sm.current_ssr_temp = fan_low - 5.0
     new_percent = 0
-    if sm.current_ssr_temp >= 60.0: new_percent = 100
-    elif sm.current_ssr_temp >= 50.0: new_percent = 50
-    check("SSR 45°C -> Fan 0%", new_percent == 0)
-    
-    # 2. At 50°C -> 50%
-    sm.current_ssr_temp = 50.0
-    if sm.current_ssr_temp >= 60.0: new_percent = 100
-    elif sm.current_ssr_temp >= 50.0: new_percent = 50
-    check("SSR 50°C -> Fan 50%", new_percent == 50)
-    
-    # 3. At 60°C -> 100%
-    sm.current_ssr_temp = 60.0
-    if sm.current_ssr_temp >= 60.0: new_percent = 100
-    elif sm.current_ssr_temp >= 50.0: new_percent = 50
-    check("SSR 60°C -> Fan 100%", new_percent == 100)
+    if sm.current_ssr_temp >= fan_high: new_percent = 100
+    elif sm.current_ssr_temp >= fan_low: new_percent = 50
+    check(f"SSR {sm.current_ssr_temp}°C (below low) -> Fan 0%", new_percent == 0)
+
+    # 2. At low threshold -> 50%
+    sm.current_ssr_temp = fan_low
+    if sm.current_ssr_temp >= fan_high: new_percent = 100
+    elif sm.current_ssr_temp >= fan_low: new_percent = 50
+    check(f"SSR {sm.current_ssr_temp}°C (at low) -> Fan 50%", new_percent == 50)
+
+    # 3. At high threshold -> 100%
+    sm.current_ssr_temp = fan_high
+    if sm.current_ssr_temp >= fan_high: new_percent = 100
+    elif sm.current_ssr_temp >= fan_low: new_percent = 50
+    check(f"SSR {sm.current_ssr_temp}°C (at high) -> Fan 100%", new_percent == 100)
 
 def test_ssr_safety_cutoff():
     _reset_monitor()
@@ -1303,8 +1309,8 @@ def test_night_mode_polling():
     # 2. Night mode active
     sm.night_mode = True
     poll_int = _cfg_mod.POLL_INTERVAL
-    if sm.night_mode: poll_int = 60
-    check("Night Mode: Poll interval increased to 60s", poll_int == 60)
+    if sm.night_mode: poll_int = getattr(_cfg_mod, 'NIGHT_POLL_INTERVAL', 15)
+    check("Night Mode: Poll interval increased to NIGHT_POLL_INTERVAL", poll_int == _cfg_mod.NIGHT_POLL_INTERVAL)
 
 # ── 27. Log Buffering and Flash Flush (Test 3) ───────────────────────────────
 section("Log Buffering and Flash Flush")
