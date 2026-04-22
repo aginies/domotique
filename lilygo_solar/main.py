@@ -60,10 +60,18 @@ def main():
     
     print("System Running Safely.")
     wdt = machine.WDT(timeout=60000)
+    flush_counter = 0
     
     while True:
         wdt.feed()
         
+        # Periodic flush of logs (every 30 mins)
+        flush_counter += 1
+        if flush_counter >= 36000: # 36000 * 50ms = 1800s = 30m
+            import domo_utils as d_u
+            d_u.flush_logs()
+            flush_counter = 0
+
         # Process button clicks safely outside of IRQ
         if _btn_pressed:
             now = utime.ticks_ms()
