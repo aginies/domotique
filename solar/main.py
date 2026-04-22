@@ -160,6 +160,14 @@ def log_file(request):
 def livelog(request):
     return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
 
+@ws_app.route('/chart.min.js')
+def chart_js(request):
+    try:
+        with open('chart.min.js', 'rb') as f:
+            return f.read(), 200, {"Content-Type": "application/javascript"}
+    except OSError:
+        return "Not found.", 404
+
 @ws_app.route('/stats')
 def stats_page(request):
     try:
