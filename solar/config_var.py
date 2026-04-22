@@ -76,8 +76,8 @@ BURST_PERIOD = 1           # seconds
 MIN_POWER_THRESHOLD = 50   # watts — reduced to match higher responsiveness
 
 
-# Minimum time equipment must stay OFF between activations (protects SSR and relay)
-MIN_OFF_TIME = 30          # seconds
+# Minimum time equipment must stay OFF between activations (protects relay contacts)
+MIN_OFF_TIME = 1           # seconds
 
 # Manual Boost duration
 BOOST_MINUTES = 60         # minutes
@@ -106,6 +106,11 @@ E_SSR_TEMP = True          # Set to True to monitor SSR heatsink.
                            # If only 1 sensor is found and E_DS18B20 is False, 
                            # it will be used for SSR temperature.
 SSR_MAX_TEMP = 75.0        # °C — safety cutoff if SSR heatsink gets too hot
+
+# Fan configuration
+E_FAN = True               # Enable fan control
+FAN_PIN = 5                # GPIO for fan control
+FAN_TEMP_OFFSET = 10       # Activate fan at SSR_MAX_TEMP - offset
 
 # Shelly watchdog: if no valid reading for this long, enter safe-state (equipment off).
 # MQTT mode: set this to at least 3× the Shelly MQTT "Update period" (Shelly web UI →

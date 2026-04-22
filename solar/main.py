@@ -85,6 +85,8 @@ def status(request):
         "shelly_error": s_m.last_shelly_error,
         "water_temp": s_m.current_water_temp,
         "ssr_temp": s_m.current_ssr_temp,
+        "fan_active": s_m.fan_active,
+        "fan_percent": s_m.fan_percent,
         "grid_source": s_m.grid_source,
         "mqtt_status": m_c.is_connected[0] if getattr(c_v, 'E_MQTT', False) is True else "disabled"
     }
@@ -108,6 +110,22 @@ def boost(request):
 def cancel_boost(request):
     s_m.cancel_boost()
     return Response(status_code=303, headers={"Location": "/"})
+
+@ws_app.route('/test_fan', methods=['POST'])
+def test_fan(request):
+    import ujson
+    try:
+        # Check for speed in query parameters or form data
+        speed = request.args.get('speed')
+        if not speed:
+            body = request.body.decode('utf-8')
+            data = ujson.loads(body)
+            speed = data.get('speed')
+        
+        success = s_m.test_fan_speed(int(speed))
+        return ujson.dumps({"success": success}), 200, {"Content-Type": "application/json"}
+    except Exception as e:
+        return ujson.dumps({"success": False, "error": str(e)}), 400, {"Content-Type": "application/json"}
 
 @ws_app.route('/web_config', methods=['GET', 'POST'])
 def web_config(request):

@@ -213,6 +213,34 @@
             </div>
 
             <div class="section">
+                <h2>Ventilateur Refroidissement SSR</h2>
+                <div class="form-group">
+                    <label for="E_FAN">Activer le ventilateur:</label>
+                    <select id="E_FAN" name="E_FAN">
+                        <option value="True"  {fan_yes}>True</option>
+                        <option value="False" {fan_no}>False</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="FAN_PIN">Pin GPIO Ventilateur:</label>
+                    <input type="number" id="FAN_PIN" name="FAN_PIN" value="{FAN_PIN}">
+                </div>
+                <div class="form-group">
+                    <label for="FAN_TEMP_OFFSET">Seuil activation (°C sous max SSR):</label>
+                    <input type="number" step="1" id="FAN_TEMP_OFFSET" name="FAN_TEMP_OFFSET" value="{FAN_TEMP_OFFSET}">
+                </div>
+                <div class="form-group">
+                    <label>Test manuel du ventilateur:</label>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="button" onclick="testFan(0)" style="flex:1; padding: 8px; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer;">0%</button>
+                        <button type="button" onclick="testFan(50)" style="flex:1; padding: 8px; background: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer;">50%</button>
+                        <button type="button" onclick="testFan(100)" style="flex:1; padding: 8px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer;">100%</button>
+                    </div>
+                    <p id="fanTestMsg" style="font-size: 0.8em; color: #aaa; margin-top: 4px; display: none;"></p>
+                </div>
+            </div>
+
+            <div class="section">
                 <h2>Mode Forcé Équipement</h2>
                 <div class="form-group">
                     <label for="FORCE_EQUIPMENT">Activer le mode forcé manuel permanent:</label>
@@ -410,6 +438,29 @@
         configForm.addEventListener('change', () => {{
             configForm.action = configServerUrl + '/save_config/';
         }});
+
+        function testFan(speed) {{
+            const msg = document.getElementById('fanTestMsg');
+            msg.style.display = 'block';
+            msg.textContent = 'Envoi commande...';
+            
+            fetch('/test_fan?speed=' + speed, {{ method: 'POST' }})
+                .then(r => r.json())
+                .then(d => {{
+                    if (d.success) {{
+                        msg.textContent = 'Test: Ventilateur réglé à ' + speed + '%';
+                        msg.style.color = '#2ecc71';
+                    }} else {{
+                        msg.textContent = 'Erreur: ' + (d.error || 'échec');
+                        msg.style.color = '#e74c3c';
+                    }}
+                    setTimeout(() => {{ msg.style.display = 'none'; }}, 5000);
+                }})
+                .catch(e => {{
+                    msg.textContent = 'Erreur réseau: ' + e;
+                    msg.style.color = '#e74c3c';
+                }});
+        }}
     </script>
 </body>
 </html>

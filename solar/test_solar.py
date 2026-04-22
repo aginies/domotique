@@ -766,9 +766,9 @@ def test_mqtt_publish_format():
     mc._queue.clear()
     mc._thread_started = True  # prevent actual thread creation in test
 
-    mc.publish_status(grid_power=-500, equipment_power=400, equipment_active=True, force_mode=False, equipment_percent=20.0, water_temp=55.5, esp32_temp=42.0)
+    mc.publish_status(grid_power=-500, equipment_power=400, equipment_active=True, force_mode=False, equipment_percent=20.0, water_temp=55.5, esp32_temp=42.0, fan_active=False, ssr_temp=45.0)
 
-    check("MQTT queue populated", len(mc._queue) == 6)
+    check("MQTT queue populated", len(mc._queue) == 7)
 
     topic, payload = mc._queue[0]
     check("Topic 1 name correct", topic == "solar_test/status_json")

@@ -11,6 +11,7 @@ A high-performance Photovoltaic (PV) Router designed for ESP32. It optimizes sel
 - **High-Speed Diversion**: Uses a **1-second physical cycle** (Burst-fire) to match the responsiveness of professional wired routers.
 - **Home Assistant Integration**: Full MQTT Auto-Discovery support. Automatically creates sensors for Grid Power, Redirected Power, and Temperatures.
 - **Safety First**:
+    - **Intelligent Cooling**: Supports 4-pin PWM fans with 3-step automatic throttling (0% < 50°C, 50% at 50°C, 100% at 60°C) and manual speed testing.
     - Dual overheat protection (internal ESP32 temp + external SSR heatsink probe).
     - Mechanical relay protection: Keeps the circuit open when idle to reduce SSR wear and provide a hardware safety cutoff.
     - Watchdog timer: Automatically cuts power if the grid meter (Shelly/JSY) becomes unreachable.

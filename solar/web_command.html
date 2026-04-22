@@ -193,6 +193,9 @@
         <div class="card" id="ssrTempCard">
             <div class="label"><span>Temp SSR</span></div>
             <div class="value" id="ssrTemp">—<span class="unit">°C</span></div>
+            <div id="fanStatus" style="margin-top: 8px; display: none;">
+                <span class="badge badge-on" id="fanBadge">Ventilateur: 0%</span>
+            </div>
         </div>
         <div class="card">
             <div class="label"><span>Mode forcé</span></div>
@@ -280,6 +283,14 @@
                     document.getElementById('ssrTempCard').style.display = 'block';
                     document.getElementById('ssrTemp').innerHTML =
                         d.ssr_temp.toFixed(1) + '<span class="unit">°C</span>';
+                    
+                    // Fan status
+                    const fanEl = document.getElementById('fanStatus');
+                    const fanBadge = document.getElementById('fanBadge');
+                    if (fanEl && fanBadge) {{
+                        fanEl.style.display = d.fan_active ? 'block' : 'none';
+                        fanBadge.textContent = 'Ventilateur: ' + d.fan_percent + '%';
+                    }}
                 }}
 
                 // Safe State

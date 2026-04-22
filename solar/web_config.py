@@ -74,6 +74,9 @@ def get_config():
         "JSY_UART_ID": config_var.JSY_UART_ID,
         "JSY_TX": config_var.JSY_TX,
         "JSY_RX": config_var.JSY_RX,
+        "E_FAN": getattr(config_var, 'E_FAN', False),
+        "FAN_PIN": getattr(config_var, 'FAN_PIN', 5),
+        "FAN_TEMP_OFFSET": getattr(config_var, 'FAN_TEMP_OFFSET', 10),
         "VERSION": version,
     }
 
@@ -105,6 +108,8 @@ def serve_config_page(IP_ADDR, WS_PORT, reboot_needed=False):
         'shelly_mqtt_no':    'selected' if getattr(config_var, 'E_SHELLY_MQTT', False) is False else '',
         'mqtt_retain_yes':   'selected' if config_var.MQTT_RETAIN is True  else '',
         'mqtt_retain_no':    'selected' if config_var.MQTT_RETAIN is False else '',
+        'fan_yes':           'selected' if getattr(config_var, 'E_FAN', False) is True  else '',
+        'fan_no':            'selected' if getattr(config_var, 'E_FAN', False) is False else '',
         'IP_ADDR': IP_ADDR,
         'WS_PORT': WS_PORT,
         'reboot_banner': '<div class="reboot-banner">Configuration sauvegardée. Redémarrage nécessaire pour appliquer les changements.</div>' if reboot_needed else '',

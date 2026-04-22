@@ -66,6 +66,14 @@ def _send_discovery(client, node_id):
             "unit_of_measurement": "%",
             "state_class": "measurement",
             "unique_id": f"{node_id}_equipment_percent"
+        },
+        {
+            "name": "Ventilateur SSR",
+            "state_topic": f"{c_v.MQTT_NAME}/fan_active",
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "device_class": "running",
+            "unique_id": f"{node_id}_fan_active"
         }
     ]
 
@@ -77,6 +85,16 @@ def _send_discovery(client, node_id):
             "device_class": "temperature",
             "state_class": "measurement",
             "unique_id": f"{node_id}_temp"
+        })
+
+    if getattr(c_v, 'E_SSR_TEMP', False):
+        sensors.append({
+            "name": "Température SSR",
+            "state_topic": f"{c_v.MQTT_NAME}/ssr_temp",
+            "unit_of_measurement": "°C",
+            "device_class": "temperature",
+            "state_class": "measurement",
+            "unique_id": f"{node_id}_ssr_temp"
         })
 
     # Add ESP32 Internal Temperature
@@ -220,7 +238,7 @@ def restart():
         _client = None
     is_connected[0] = False
 
-def publish_status(grid_power, equipment_power, equipment_active, force_mode, equipment_percent, water_temp, esp32_temp):
+def publish_status(grid_power, equipment_power, equipment_active, force_mode, equipment_percent, water_temp, esp32_temp, fan_active=False, ssr_temp=None, fan_percent=0):
     if not getattr(c_v, 'E_MQTT', False) or not c_v.MQTT_IP:
         return
 
@@ -233,7 +251,10 @@ def publish_status(grid_power, equipment_power, equipment_active, force_mode, eq
         "force_mode":        force_mode,
         "equipment_percent": round(equipment_percent, 1),
         "water_temp":        water_temp,
-        "esp32_temp":        esp32_temp
+        "ssr_temp":          ssr_temp,
+        "esp32_temp":        esp32_temp,
+        "fan_active":        fan_active,
+        "fan_percent":       fan_percent
     })
 
     _lock.acquire()
@@ -245,6 +266,10 @@ def publish_status(grid_power, equipment_power, equipment_active, force_mode, eq
     _queue.append((f"{base}/equipment_power",   str(equipment_power)))
     _queue.append((f"{base}/equipment_percent", str(round(equipment_percent, 1))))
     _queue.append((f"{base}/esp32_temp",        str(esp32_temp)))
+    _queue.append((f"{base}/fan_active",        "ON" if fan_active else "OFF"))
+    _queue.append((f"{base}/fan_percent",       str(fan_percent)))
     if water_temp is not None:
         _queue.append((f"{base}/temperature",   str(water_temp)))
+    if ssr_temp is not None:
+        _queue.append((f"{base}/ssr_temp",      str(ssr_temp)))
     _lock.release()

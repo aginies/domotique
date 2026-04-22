@@ -20,13 +20,16 @@ safe_state = False         # True when Shelly unreachable > SHELLY_TIMEOUT
 last_shelly_error = None
 current_water_temp = None  # °C from DS18B20, None if not available
 current_ssr_temp = None    # °C from DS18B20 on heatsink, None if not available
-grid_source = "HTTP"       # "MQTT" or "HTTP"
+fan_active = False         # SSR Cooling fan status
+fan_percent = 0            # SSR Cooling fan speed percentage (0-100)
+grid_source = "MQTT"       # "MQTT" or "HTTP"
 boost_end_time = 0         # utime.time() when boost expires
 power_history = []         # Rolling buffer of last 5 minutes (60 points)
 
 # ── Private state ────────────────────────────────────────────────────────────
 _ssr_pin = None
 _relay = None
+_fan_pin = None
 _current_duty = 0.0        # target duty [0.0–1.0], written by monitor_loop
 _last_off_time = 0         # utime.time() when equipment was last turned off
 _last_good_poll = 0        # utime.time() of last successful Shelly read
@@ -35,6 +38,7 @@ _last_mqtt_report = 0      # utime.time() of last MQTT report
 _last_data_log_time = 0    # utime.time() of last solar_data.txt write
 _last_pi_time = 0          # utime.ticks_ms() of last PI update
 _last_temp_read = 0        # utime.time() of last DS18B20 read
+_in_surplus = False        # True when grid was negative last iteration (surplus zone)
 
 
 # ── PI controller ────────────────────────────────────────────────────────────
@@ -52,6 +56,8 @@ class PIController:
         at_lower = self._output <= 0.0
         if not (at_upper and error > 0) and not (at_lower and error < 0):
             self._integral += error * dt
+            # Cap integral so wind-up from a large surplus can't delay shutdown by more than ~5 s
+            self._integral = max(-10.0, min(10.0, self._integral))
         self._output = self.kp * error + self.ki * self._integral
         self._output = max(0.0, min(1.0, self._output))
         return self._output
@@ -67,11 +73,22 @@ _pi = PIController(c_v.PID_KP, c_v.PID_KI)
 # ── Hardware init ─────────────────────────────────────────────────────────────
 
 def init_ssr_relay():
-    global _ssr_pin, _relay
+    global _ssr_pin, _relay, _fan_pin
     _ssr_pin = Pin(c_v.SSR_PIN, Pin.OUT)
     _ssr_pin.value(0)
     _relay = Pin(c_v.RELAY_PIN, Pin.OUT)
     _relay.value(1)
+    
+    # Fan init with PWM for 4-pin fan
+    if getattr(c_v, 'E_FAN', False):
+        from machine import PWM
+        try:
+            # Use 1kHz instead of 25kHz for better compatibility with 3.3V logic
+            _fan_pin = PWM(Pin(c_v.FAN_PIN), freq=1000, duty_u16=0)
+            d_u.print_and_store_log(f"Fan PWM on pin={c_v.FAN_PIN} initialized (1kHz, 0%)")
+        except Exception as e:
+            d_u.print_and_store_log(f"Fan PWM Init Error: {e}")
+
     d_u.print_and_store_log(
         f"SSR pin={c_v.SSR_PIN} (digital), Relay pin={c_v.RELAY_PIN} initialized (relay ON)"
     )
@@ -81,6 +98,7 @@ def init_ssr_relay():
 
 _ds = None
 _ds_roms = []
+_jsy = None
 
 def _init_ds18b20():
     global _ds, _ds_roms
@@ -233,11 +251,32 @@ def _publish_status_mqtt():
                 force_mode_active,
                 _current_duty * 100.0,
                 current_water_temp,
-                esp_temp
+                esp_temp,
+                fan_active=fan_active,
+                ssr_temp=current_ssr_temp,
+                fan_percent=fan_percent
             )
             _last_mqtt_report = now
         except Exception as err:
             d_u.print_and_store_log(f"MQTT publish error: {err}")
+
+
+def test_fan_speed(percent):
+    """ Manually set fan speed for testing (resets on next monitor loop) """
+    global fan_percent, fan_active
+    if not getattr(c_v, 'E_FAN', False) or not _fan_pin:
+        return False
+    
+    try:
+        p = max(0, min(100, int(percent)))
+        duty = int(p * 65535 / 100)
+        _fan_pin.duty_u16(duty)
+        fan_percent = p
+        fan_active = (p > 0)
+        d_u.print_and_store_log(f"SOLAR TEST: Fan set to {p}%")
+        return True
+    except:
+        return False
 
 
 def start_boost(minutes=None):
@@ -314,7 +353,8 @@ async def history_loop():
             "t": utime.time(),
             "g": current_grid_power,
             "e": equipment_power,
-            "s": current_ssr_temp
+            "s": current_ssr_temp,
+            "f": fan_active
         }
         power_history.append(point)
         if len(power_history) > 60:
@@ -332,7 +372,7 @@ async def monitor_loop():
     global current_grid_power, force_mode_active, safe_state, equipment_active
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
     global current_water_temp, current_ssr_temp, grid_source, _last_data_log_time, _last_pi_time
-    global _last_temp_read
+    global _last_temp_read, fan_active, fan_percent, _in_surplus, _jsy
 
     _init_ds18b20()
     _last_good_poll = utime.time()
@@ -356,10 +396,9 @@ async def monitor_loop():
             esp_temp = esp32.mcu_temperature()
             max_esp_temp = getattr(c_v, 'MAX_ESP32_TEMP', 70.0)
             if esp_temp >= max_esp_temp:
-                if _current_duty > 0:
-                    d_u.print_and_store_log(
-                        f"SOLAR SAFETY: ESP32 Overheat {esp_temp}C >= {max_esp_temp}C — equipment OFF"
-                    )
+                d_u.print_and_store_log(
+                    f"SOLAR SAFETY: ESP32 {esp_temp:.1f}C >= {max_esp_temp}C — equipment OFF"
+                )
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -371,15 +410,32 @@ async def monitor_loop():
             if (now - _last_temp_read) >= temp_interval:
                 _last_temp_read = now
                 await _read_temps()
+                
+                # SSR Fan Control Logic (PWM 4-pin fan)
+                if getattr(c_v, 'E_FAN', False) and current_ssr_temp is not None:
+                    # 0% until 50°C, then 50%, then 100% at 60°C
+                    new_percent = 0
+                    if current_ssr_temp >= 60.0:
+                        new_percent = 100
+                    elif current_ssr_temp >= 50.0:
+                        new_percent = 50
+                    
+                    if new_percent != fan_percent:
+                        d_u.print_and_store_log(f"SOLAR COOLING: Fan speed {new_percent}% (temp={current_ssr_temp}°C)")
+                        fan_percent = new_percent
+                        fan_active = (new_percent > 0)
+                        if _fan_pin:
+                            # duty_u16 range is 0-65535
+                            duty = int(new_percent * 65535 / 100)
+                            _fan_pin.duty_u16(duty)
 
             # ── Temperature safety cutoffs ─────────────────────────────────────
             # 1. Equipment/Water
             max_water_temp = getattr(c_v, 'EQUIPMENT_MAX_TEMP', 65.0)
             if current_water_temp is not None and current_water_temp >= max_water_temp:
-                if _current_duty > 0:
-                    d_u.print_and_store_log(
-                        f"SOLAR SAFETY: temp {current_water_temp}°C >= {max_water_temp}°C — equipment OFF"
-                    )
+                d_u.print_and_store_log(
+                    f"SOLAR SAFETY: water {current_water_temp}°C >= {max_water_temp}°C — equipment OFF"
+                )
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -389,10 +445,9 @@ async def monitor_loop():
             # 2. SSR Heatsink
             max_ssr_temp = getattr(c_v, 'SSR_MAX_TEMP', 75.0)
             if current_ssr_temp is not None and current_ssr_temp >= max_ssr_temp:
-                if _current_duty > 0:
-                    d_u.print_and_store_log(
-                        f"SOLAR SAFETY: SSR temp {current_ssr_temp}°C >= {max_ssr_temp}°C — equipment OFF"
-                    )
+                d_u.print_and_store_log(
+                    f"SOLAR SAFETY: SSR {current_ssr_temp}°C >= {max_ssr_temp}°C — equipment OFF"
+                )
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -560,36 +615,39 @@ async def monitor_loop():
                 await asyncio.sleep(poll_int)
                 continue
 
-            surplus = -current_grid_power  # actual watts exported to grid (positive = export)
+            surplus = base_setpoint - current_grid_power  # positive = room to ramp up toward setpoint
 
             # Minimum off-time guard (anti-cycling when equipment is off)
             min_off = getattr(c_v, 'MIN_OFF_TIME', 30)
             if _current_duty == 0.0 and (now - _last_off_time) < min_off:
+                remaining = min_off - (now - _last_off_time)
+                d_u.print_and_store_log(
+                    f"SOLAR [OFF-WAIT {remaining:.0f}s] grid={current_grid_power:.0f}W surplus={surplus:.0f}W"
+                )
                 _publish_status_mqtt()
                 await asyncio.sleep(poll_int)
                 continue
 
-            # Threshold: only prevents *starting* when surplus is negligible.
-            # Never cut running equipment — at convergence surplus approaches 0
-            # and the threshold would fire right when the PI succeeds, resetting
-            # everything and causing a permanent oscillation. The PI's negative
-            # error already ramps duty down smoothly when solar drops.
+            # Threshold: only prevents *starting* when headroom to setpoint is negligible.
+            # Never cut running equipment — the PI's negative error ramps duty down smoothly.
             if surplus < min_threshold and _current_duty == 0.0:
                 status_tag = "OFF"
             else:
-                # Three-zone control:
-                # Zone 1 (grid < 0): solar surplus — absorb toward zero-export.
-                # Zone 2 (0 <= grid <= EXPORT_SETPOINT): within allowed import — hold duty.
-                # Zone 3 (grid > EXPORT_SETPOINT): excess import — reduce equipment.
-                # Negative setpoint (export buffer): standard PI toward that export target.
-                if base_setpoint < 0:
-                    error = (base_setpoint - current_grid_power) / max_p
-                elif current_grid_power < 0:
-                    error = -current_grid_power / max_p
-                elif current_grid_power > base_setpoint:
-                    error = (base_setpoint - current_grid_power) / max_p
-                else:
-                    error = 0.0  # importing within allowed range, hold
+                # PI drives grid toward EXPORT_SETPOINT.
+                # error > 0: grid below target, ramp equipment up.
+                # error < 0: grid above target, ramp equipment down.
+                error = (base_setpoint - current_grid_power) / max_p
+
+                # Reset integral when grid crosses the setpoint from below (target overshot
+                # or solar suddenly dropped). Prevents integral inertia from delaying response.
+                now_in_surplus = current_grid_power < base_setpoint
+                if _in_surplus and not now_in_surplus and _current_duty > 0.0:
+                    _pi.reset()
+                    d_u.print_and_store_log(
+                        f"SOLAR: grid crossed setpoint (grid={current_grid_power:.0f}W, "
+                        f"setpoint={base_setpoint:.0f}W) — PI reset"
+                    )
+                _in_surplus = now_in_surplus
 
                 now_ms = utime.ticks_ms()
                 if _last_pi_time == 0:
