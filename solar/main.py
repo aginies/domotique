@@ -3,6 +3,7 @@
 
 import time
 import os
+import gc
 import asyncio
 import _thread
 import ujson
@@ -87,6 +88,11 @@ def status(request):
         "ssr_temp": s_m.current_ssr_temp,
         "fan_active": s_m.fan_active,
         "fan_percent": s_m.fan_percent,
+        "night_mode": s_m.night_mode,
+        "rtc_time": "{:02d}:{:02d}:{:02d}".format(*d_u.show_rtc_time()),
+        "total_import": s_m._total_import_Wh,
+        "total_redirect": s_m._total_redirect_Wh,
+        "total_export": s_m._total_export_Wh,
         "grid_source": s_m.grid_source,
         "mqtt_status": m_c.is_connected[0] if getattr(c_v, 'E_MQTT', False) is True else "disabled"
     }
@@ -154,25 +160,52 @@ def log_file(request):
 def livelog(request):
     return w_l.create_log_page(), 200, {"Content-Type": "text/html"}
 
+@ws_app.route('/stats')
+def stats_page(request):
+    try:
+        with open('web_stats.html', 'r') as f:
+            return f.read(), 200, {"Content-Type": "text/html"}
+    except OSError:
+        return "Statistics page not found.", 404
+
+@ws_app.route('/get_stats')
+def get_stats(request):
+    try:
+        with open('stats.json', 'r') as f:
+            return f.read(), 200, {"Content-Type": "application/json"}
+    except OSError:
+        return "{}", 200, {"Content-Type": "application/json"}
+
 @ws_app.route('/get_log_action')
 def get_log_action(request):
+    d_u.flush_logs() # Ensure we see the latest
     response, status_code, headers = w_l.serve_log_file(10, ["SOLAR", "MQTT", "Shelly"])
     return response, status_code, headers
 
 @ws_app.route('/get_log_upload')
 def get_log_upload(request):
+    d_u.flush_logs()
     response, status_code, headers = w_l.serve_log_file(20, ["UPLOAD", "UPDATE"])
     return response, status_code, headers
 
 @ws_app.route('/get_solar_data')
 def get_solar_data(request):
+    # Combine buffer and file
+    s_m._flush_solar_data() 
     try:
         with open("solar_data.txt", "r") as f:
-            lines = f.readlines()
-            content = "".join(lines[-30:])
-            return content, 200, {"Content-Type": "text/plain"}
+            return f.read(), 200, {"Content-Type": "text/plain"}
     except OSError:
-        return "No data log yet.", 200, {"Content-Type": "text/plain"}
+        return "No data recorded yet.", 200, {"Content-Type": "text/plain"}
+
+@ws_app.route('/RESET_device')
+def reset_device(request):
+    d_u.print_and_store_log("SERVER: Manual reset requested - flushing all buffers")
+    s_m._save_stats_to_file()
+    s_m._flush_solar_data()
+    d_u.flush_logs()
+    d_u.perform_reset()
+    return "Resetting...", 200
 
 @ws_app.route('/file_management')
 def file_management(request):
@@ -356,6 +389,10 @@ async def watchdog_and_log_task(wdt):
             # Check size and rotate/cleanup if exceeds 40KB
             d_u._rotate_log_if_needed(paths.LOG_FILE, 40 * 1024)
             m_c.restart()
+            gc.collect()
+        
+        # Regular cleanup every 5s
+        gc.collect()
         await asyncio.sleep(5)
 
 async def _start_all(ip, port, error_vars, wifi_watchdog_enabled, wdt):
