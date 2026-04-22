@@ -210,6 +210,16 @@ def ensure_started():
     """Start the MQTT worker thread if not already running (e.g. when E_MQTT=False but E_SHELLY_MQTT=True)."""
     _ensure_thread()
 
+def restart():
+    """ Force background thread to reconnect """
+    global _client
+    d_u.print_and_store_log("MQTT: Scheduled restart requested")
+    if _client:
+        try: _client.sock.close()
+        except: pass
+        _client = None
+    is_connected[0] = False
+
 def publish_status(grid_power, equipment_power, equipment_active, force_mode, equipment_percent, water_temp, esp32_temp):
     if not getattr(c_v, 'E_MQTT', False) or not c_v.MQTT_IP:
         return

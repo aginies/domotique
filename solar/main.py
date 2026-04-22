@@ -146,6 +146,16 @@ def get_log_upload(request):
     response, status_code, headers = w_l.serve_log_file(20, ["UPLOAD", "UPDATE"])
     return response, status_code, headers
 
+@ws_app.route('/get_solar_data')
+def get_solar_data(request):
+    try:
+        with open("solar_data.txt", "r") as f:
+            lines = f.readlines()
+            content = "".join(lines[-30:])
+            return content, 200, {"Content-Type": "text/plain"}
+    except OSError:
+        return "No data log yet.", 200, {"Content-Type": "text/plain"}
+
 @ws_app.route('/file_management')
 def file_management(request):
     return w_f_m.serve_file_management_page(), 200, {"Content-Type": "text/html"}
@@ -324,9 +334,10 @@ async def watchdog_and_log_task(wdt):
         # 7200 seconds = 2 hours
         if log_check_counter >= 7200:
             log_check_counter = 0
-            d_u.print_and_store_log("Performing scheduled log cleanup...")
+            d_u.print_and_store_log("Performing scheduled log cleanup and MQTT restart...")
             # Check size and rotate/cleanup if exceeds 40KB
             d_u._rotate_log_if_needed(paths.LOG_FILE, 40 * 1024)
+            m_c.restart()
         await asyncio.sleep(5)
 
 async def _start_all(ip, port, error_vars, wifi_watchdog_enabled, wdt):

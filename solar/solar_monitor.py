@@ -32,6 +32,9 @@ _last_off_time = 0         # utime.time() when equipment was last turned off
 _last_good_poll = 0        # utime.time() of last successful Shelly read
 _safe_state_logged = False # avoid log spam
 _last_mqtt_report = 0      # utime.time() of last MQTT report
+_last_data_log_time = 0    # utime.time() of last solar_data.txt write
+_last_pi_time = 0          # utime.ticks_ms() of last PI update
+_last_temp_read = 0        # utime.time() of last DS18B20 read
 
 
 # ── PI controller ────────────────────────────────────────────────────────────
@@ -328,11 +331,11 @@ async def monitor_loop():
     """
     global current_grid_power, force_mode_active, safe_state, equipment_active
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
-    global current_water_temp, current_ssr_temp, grid_source
+    global current_water_temp, current_ssr_temp, grid_source, _last_data_log_time, _last_pi_time
+    global _last_temp_read
 
     _init_ds18b20()
     _last_good_poll = utime.time()
-    temp_read_counter = 0
 
     # Ensure MQTT worker is running when Shelly MQTT is the grid source,
     # even if E_MQTT (status publishing) is disabled.
@@ -345,7 +348,10 @@ async def monitor_loop():
         try:
             now = utime.time()
             poll_int = getattr(c_v, 'POLL_INTERVAL', 2)
-
+            max_p = float(getattr(c_v, 'EQUIPMENT_MAX_POWER', 2000))
+            status_tag = "WAIT"
+            surplus = 0.0
+            log_msg = None
             # ── ESP32 Temperature safety cutoff ───────────────────────────────
             esp_temp = esp32.mcu_temperature()
             max_esp_temp = getattr(c_v, 'MAX_ESP32_TEMP', 70.0)
@@ -360,10 +366,10 @@ async def monitor_loop():
                 await asyncio.sleep(poll_int)
                 continue
 
-            # ── DS18B20: read every 15 polls (~30 s) ────────────────────────────
-            temp_read_counter += 1
-            if temp_read_counter >= 15:
-                temp_read_counter = 0
+            # ── DS18B20: read every 30 s regardless of loop speed ───────────────
+            temp_interval = getattr(c_v, 'TEMP_READ_INTERVAL', 30)
+            if (now - _last_temp_read) >= temp_interval:
+                _last_temp_read = now
                 await _read_temps()
 
             # ── Temperature safety cutoffs ─────────────────────────────────────
@@ -554,9 +560,7 @@ async def monitor_loop():
                 await asyncio.sleep(poll_int)
                 continue
 
-            # surplus = watts currently exported to grid beyond our target.
-            # Negative = importing (nothing to divert).
-            surplus = -(current_grid_power - base_setpoint)
+            surplus = -current_grid_power  # actual watts exported to grid (positive = export)
 
             # Minimum off-time guard (anti-cycling when equipment is off)
             min_off = getattr(c_v, 'MIN_OFF_TIME', 30)
@@ -565,27 +569,74 @@ async def monitor_loop():
                 await asyncio.sleep(poll_int)
                 continue
 
-            # Below threshold: cut off and reset PI integrator
-            if surplus < min_threshold:
-                if _current_duty > 0.0:
-                    status_tag = "OFF(threshold)"
-                    _pi.reset()
-                else:
-                    status_tag = "OFF"
-                _current_duty = 0.0
+            # Threshold: only prevents *starting* when surplus is negligible.
+            # Never cut running equipment — at convergence surplus approaches 0
+            # and the threshold would fire right when the PI succeeds, resetting
+            # everything and causing a permanent oscillation. The PI's negative
+            # error already ramps duty down smoothly when solar drops.
+            if surplus < min_threshold and _current_duty == 0.0:
+                status_tag = "OFF"
             else:
-                # PI controller drives grid power toward base_setpoint.
-                # error > 0 means we have surplus to absorb → increase duty.
-                error = (base_setpoint - current_grid_power) / max_p
-                _current_duty = _pi.update(error, float(poll_int))
-                status_tag = "PI({:.0f}W)".format(_current_duty * max_p)
+                # Three-zone control:
+                # Zone 1 (grid < 0): solar surplus — absorb toward zero-export.
+                # Zone 2 (0 <= grid <= EXPORT_SETPOINT): within allowed import — hold duty.
+                # Zone 3 (grid > EXPORT_SETPOINT): excess import — reduce equipment.
+                # Negative setpoint (export buffer): standard PI toward that export target.
+                if base_setpoint < 0:
+                    error = (base_setpoint - current_grid_power) / max_p
+                elif current_grid_power < 0:
+                    error = -current_grid_power / max_p
+                elif current_grid_power > base_setpoint:
+                    error = (base_setpoint - current_grid_power) / max_p
+                else:
+                    error = 0.0  # importing within allowed range, hold
 
-            d_u.print_and_store_log(
+                now_ms = utime.ticks_ms()
+                if _last_pi_time == 0:
+                    dt = float(poll_int)
+                else:
+                    dt = utime.ticks_diff(now_ms, _last_pi_time) / 1000.0
+                _last_pi_time = now_ms
+
+                power_buffer = float(getattr(c_v, 'POWER_BUFFER', 0))
+                if power_buffer > 0 and abs(error * max_p) < power_buffer:
+                    # Grid is within POWER_BUFFER watts of setpoint: hold duty.
+                    # Avoids chasing measurement noise when already well-tuned.
+                    status_tag = "HOLD({:.0f}W)".format(_current_duty * max_p)
+                else:
+                    _current_duty = _pi.update(error, dt)
+                    if _current_duty > 0.0:
+                        status_tag = "PI({:.0f}W)".format(_current_duty * max_p)
+                    else:
+                        status_tag = "OFF(PI)"
+                        _pi.reset()
+
+            # --- Selective Logging ---
+            log_msg = (
                 f"SOLAR [{status_tag}] grid={current_grid_power:.0f}W"
                 f" surplus={surplus:.0f}W"
                 f" {getattr(c_v, 'EQUIPMENT_NAME', 'EQUIPMENT')}={_current_duty * max_p:.0f}W({_current_duty * 100:.0f}%)"
                 + (f" temp={current_water_temp}C" if current_water_temp is not None else "")
             )
+            
+            # 1. Print to console (always)
+            print(utime.time(), ": ", log_msg)
+            
+            # 2. Write to solar_data.txt (every 1 minute)
+            if log_msg and (now - _last_data_log_time) >= 60:
+                try:
+                    # Clean up old data file if it gets massive
+                    if d_u.file_exists("solar_data.txt"):
+                         d_u._rotate_log_if_needed("solar_data.txt", 100 * 1024)
+                    
+                    with open("solar_data.txt", "a") as f:
+                        curr_date = d_u.show_rtc_date()
+                        h, m, s = d_u.show_rtc_time()
+                        curr_time = "{:02d}:{:02d}:{:02d}".format(h, m, s)
+                        f.write(f"{curr_date} {curr_time}: {log_msg}\n")
+                    _last_data_log_time = now
+                except:
+                    pass
 
             # ── MQTT publish ──────────────────────────────────────────────────
             _publish_status_mqtt()
