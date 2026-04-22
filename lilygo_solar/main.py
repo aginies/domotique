@@ -59,20 +59,11 @@ def main():
     mqtt_receiver.start(display)
     
     print("System Running Safely.")
-    log_check_counter = 0
     wdt = machine.WDT(timeout=60000)
     
     while True:
         wdt.feed()
         
-        # Log cleanup check (every 2 hours)
-        log_check_counter += 5
-        if log_check_counter >= 7200:
-            log_check_counter = 0
-            import paths
-            import domo_utils as d_u
-            d_u._rotate_log_if_needed(paths.LOG_FILE, 40 * 1024)
-
         # Process button clicks safely outside of IRQ
         if _btn_pressed:
             now = utime.ticks_ms()

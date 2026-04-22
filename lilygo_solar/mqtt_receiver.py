@@ -40,24 +40,52 @@ def draw_huge_text(display, text, x, y, color):
                 if fb.pixel(cx, cy):
                     display.fill_rect(x + (i * 24) + (cx * 3), y + (cy * 3), 3, 3, color)
 
+def draw_electricity_symbol(display, x, y, color):
+    """ Draw a sharp lightning bolt flash symbol """
+    # Bolt shape using points: Top-right -> Mid-left -> Mid-right -> Bottom-left
+    # Coordinate offsets relative to x, y
+    p1 = (x+14, y)      # Top
+    p2 = (x+4,  y+14)   # Mid-left kink
+    p3 = (x+10, y+14)   # Mid-right kink
+    p4 = (x+2,  y+28)   # Bottom tip
+    
+    # Draw outline
+    display.line(p1[0], p1[1], p2[0], p2[1], color) # Top slanted down
+    display.line(p2[0], p2[1], p3[0], p3[1], color) # Horizontal step
+    display.line(p3[0], p3[1], p4[0], p4[1], color) # Long slanted down
+    
+    # Add a bit of thickness by drawing offset lines
+    display.line(p1[0]-1, p1[1], p2[0]-1, p2[1], color)
+    display.line(p3[0]-1, p3[1], p4[0]-1, p4[1], color)
+
+def draw_redirection_symbol(display, x, y, color):
+    """ Draw a redirection arrow symbol """
+    # Horizontal line with an arrow head
+    display.hline(x, y+15, 20, color)
+    display.line(x+15, y+10, x+20, y+15, color)
+    display.line(x+15, y+20, x+20, y+15, color)
+    # Circle/loop part
+    display.vline(x, y+5, 10, color)
+    display.hline(x, y+5, 10, color)
+
 def draw_dashboard(data):
     grid = data.get('grid_power', 0)
     equip = data.get('equipment_power', 0)
     esp_t = data.get('esp32_temp', 0)
-    ssr_t = data.get('water_temp', 'N/A')
+    ssr_t = data.get('ssr_temp', 'N/A')
     force = "ON" if data.get('force_mode') else "OFF"
     
     # Single clear at start
     _display.fill(st7789.BLACK)
     
-    # 1. ENEDIS (Huge)
+    # 1. ENEDIS (Electricity symbol)
     g_color = st7789.RED if grid > 0 else st7789.GREEN
-    draw_huge_text(_display, "E:", 10, 5, st7789.WHITE)
+    draw_electricity_symbol(_display, 10, 5, st7789.WHITE)
     draw_huge_text(_display, f"{grid:.0f}", 58, 5, g_color)
     draw_huge_text(_display, "w", 170, 5, st7789.WHITE)
     
-    # 2. RED (Huge)
-    draw_huge_text(_display, "R:", 10, 35, st7789.WHITE)
+    # 2. REDIRECTION (Arrow symbol)
+    draw_redirection_symbol(_display, 10, 35, st7789.WHITE)
     draw_huge_text(_display, f"{equip:.0f}", 58, 35, st7789.YELLOW)
     draw_huge_text(_display, "w", 170, 35, st7789.WHITE)
     # 3. FORCE (Normal Label, Colorized Status)
@@ -150,7 +178,7 @@ def _mqtt_callback(topic, msg):
         grid = data.get('grid_power', 0)
         equip = data.get('equipment_power', 0)
         esp_t = data.get('esp32_temp', 0)
-        ssr_t = data.get('water_temp')
+        ssr_t = data.get('ssr_temp')
         
         history_p.append((grid, equip))
         history_t.append((esp_t, ssr_t))
