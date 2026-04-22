@@ -67,6 +67,10 @@
             margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 1px;
+            height: 34px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }}
         .card .value {{
             font-size: 2em;
@@ -113,9 +117,33 @@
             transition: background 0.2s;
         }}
         .footer a:hover {{ background: #1a5276; }}
+        
+        /* Tab Styles */
+        .tab-container {{
+            max-width: 800px;
+            margin: 16px auto 0 auto;
+            display: flex;
+            gap: 5px;
+        }}
+        .tab-btn {{
+            background: #0f3460;
+            color: #aaa;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: bold;
+        }}
+        .tab-btn.active {{
+            background: #0d0d1a;
+            color: #f0c040;
+            border-bottom: 2px solid #f0c040;
+        }}
+
         .log-box {{
             background: #0d0d1a;
-            border-radius: 8px;
+            border-radius: 0 8px 8px 8px;
             padding: 12px;
             height: 180px;
             overflow-y: auto;
@@ -125,9 +153,8 @@
             font-family: monospace;
             color: #ccc;
             white-space: pre-wrap;
-            margin-top: 16px;
             max-width: 800px;
-            margin: 16px auto 0 auto;
+            margin: 0 auto 16px auto;
             line-height: 1.4;
         }}
         .log-box::-webkit-scrollbar {{
@@ -153,19 +180,23 @@
 
     <div class="cards">
         <div class="card">
-            <div class="label">Puissance réseau <span id="gridSource" style="font-size:0.7em; color:#888; margin-left:4px;">(...)</span></div>
+            <div class="label">
+                <span>Puissance réseau</span>
+                <span id="gridSource" style="text-transform:none; font-size:0.9em; color:#888;">(...)</span>
+            </div>
             <div class="value" id="gridPower">—<span class="unit">W</span></div>
         </div>
         <div class="card">
-            <div class="label">{EQUIPMENT_NAME}</div>
+            <div class="label"><span>{EQUIPMENT_NAME}</span></div>
             <div class="value" id="equipmentPower">—<span class="unit">W</span></div>
         </div>
-        <div class="card" id="ssrTempCard" style="display: none;">
-            <div class="label">Temp SSR</div>
+        <div class="card" id="ssrTempCard">
+            <div class="label"><span>Temp SSR</span></div>
             <div class="value" id="ssrTemp">—<span class="unit">°C</span></div>
         </div>
         <div class="card">
-            <div class="label">Mode forcé</div>
+            <div class="label"><span>Mode forcé</span></div>
+
             <div id="forceMode"><span class="badge badge-off">Inactif</span></div>
             <div style="margin-top: 12px;">
                 <form action="/boost" method="POST" style="display:flex; gap: 4px; justify-content: center;">
@@ -188,6 +219,11 @@
     </div>
 
     <div id="safeStateBox" class="error-box"></div>
+    
+    <div class="tab-container">
+        <button id="tabSys" class="tab-btn active" onclick="setLogMode('sys')">Log Système</button>
+        <button id="tabData" class="tab-btn" onclick="setLogMode('data')">Log Données (1m)</button>
+    </div>
     <div class="log-box" id="logBox">Chargement...</div>
 
     <div class="footer">
@@ -199,6 +235,14 @@
 
     <script>
         let powerChart = null;
+        let logMode = 'sys'; // 'sys' or 'data'
+
+        function setLogMode(mode) {{
+            logMode = mode;
+            document.getElementById('tabSys').classList.toggle('active', mode === 'sys');
+            document.getElementById('tabData').classList.toggle('active', mode === 'data');
+            updateLog();
+        }}
 
         function updateDateTime() {{
             const now = new Date();
@@ -274,7 +318,8 @@
 
         async function updateLog() {{
             try {{
-                const r = await fetch('/get_log_action');
+                const endpoint = logMode === 'sys' ? '/get_log_action' : '/get_solar_data';
+                const r = await fetch(endpoint);
                 const text = await r.text();
                 const lines = text.trim().split('\n');
                 const logBox = document.getElementById('logBox');
