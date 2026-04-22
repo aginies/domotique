@@ -15,9 +15,26 @@ import utime
 import paths
 
 LOG_MAX_BYTES = 40 * 1024
+_log_buffer = []
+
+def flush_logs(filename=paths.LOG_FILE):
+    """ Writes the RAM log buffer to flash memory. """
+    global _log_buffer
+    if not _log_buffer:
+        return
+    
+    try:
+        _rotate_log_if_needed(filename, LOG_MAX_BYTES)
+        with open(filename, "a") as file:
+            for line in _log_buffer:
+                file.write(line + "\n")
+        _log_buffer = []
+    except Exception as e:
+        print(f"Failed to flush logs: {e}")
 
 def perform_reset():
     """ reset the device """
+    flush_logs()
     utime.sleep(1.5)
     machine.reset()
 
@@ -126,19 +143,27 @@ def _rotate_log_if_needed(filename, max_bytes):
         print(f"log rotation failed for {filename}: {err}")
 
 def store_log(text_data, filename=paths.LOG_FILE):
-    """ Stores a text string as a new line in a log file. """
-    _rotate_log_if_needed(filename, LOG_MAX_BYTES)
-    with open(filename, "a") as file:
-        file.write(text_data + "\n")
+    """ Stores a text string as a new line in a RAM buffer. """
+    global _log_buffer
+    _log_buffer.append(text_data)
+    
+    # Auto-flush if buffer gets too large (e.g., 20 lines) to avoid RAM pressure
+    if len(_log_buffer) >= 20:
+        flush_logs(filename)
 
 def print_and_store_log(text_data):
-    """ print log and store them """
+    """ print log and store them in RAM buffer """
     hour, minute, second = show_rtc_time()
     current_date = show_rtc_date()
     current_time = f"{hour:02d}:{minute:02d}:{second:02d}"
     data_to_print = current_date+" "+current_time+": "+text_data
     print(data_to_print)
     store_log(data_to_print)
+    
+    # Immediate flush for critical/safety events
+    upper_msg = text_data.upper()
+    if "SAFETY" in upper_msg or "CRITICAL" in upper_msg or "ERROR" in upper_msg or "WATCHDOG" in upper_msg:
+        flush_logs()
 
 def file_exists(file_path):
     """Check if a file exists"""
@@ -378,6 +403,12 @@ def show_rtc_date():
     #weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     #weekday_str = weekdays[weekday]
     return date_str
+
+def get_paris_time_minutes():
+    """ Returns current minutes since midnight in Paris timezone. """
+    h, m, _ = show_rtc_time()
+    # show_rtc_time handles 24h wrap internally but let's be safe
+    return (h % 24) * 60 + m
 
 def get_memory_info():
     """
