@@ -18,7 +18,10 @@ A high-performance Photovoltaic (PV) Router designed for ESP32. It optimizes sel
 - **Rich Web Interface**:
     - Real-time power dashboard with color-coded interactive graphs (Chart.js).
     - Dynamic logs with auto-scrolling and keyword colorization.
-    - Manual **Boost** mode (1h, 2h, or 3h) and daily scheduled windows.
+    - **Manual Boost** mode (1h, 2h, or 3h) and daily scheduled windows.
+    - **Advanced History & Statistics**: 365-day rolling energy tracking (Wh/kWh) for grid import and solar savings. Dedicated dashboard with Day/Month/Year views and interactive Gausse/Bar charts.
+    - **Flash Protection System**: High-efficiency RAM buffering for all logging operations (`log.txt` and `solar_data.txt`). Reduces write frequency to flash memory by over 90% to maximize hardware lifespan.
+    - **Eco Night Mode**: Smart time-aware logic that reduces polling frequency during non-productive hours (configurable, e.g., 15s interval) to minimize network load and CPU overhead.
     - Secure configuration page for all parameters (PID gains, thresholds, pins).
 
 ## Hardware Requirements
