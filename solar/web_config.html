@@ -261,10 +261,27 @@
                     <input type="text" id="FORCE_START" name="FORCE_START" value="{FORCE_START}">
                 </div>
                 <div class="form-group">
-                    <label for="FORCE_END">Heure de fin (HH:MM):</label>
+                    <label for="FORCE_END">Fin plage (HH:MM):</label>
                     <input type="text" id="FORCE_END" name="FORCE_END" value="{FORCE_END}">
                 </div>
-            </div>
+                </div>
+
+                <div class="section">
+                <h2>Mode Nuit (Basse fréquence de lecture)</h2>
+                <p style="font-size: 0.8em; color: #888; margin-bottom: 10px;">Réduit la fréquence des requêtes Shelly à 1/min durant cette période.</p>
+                <div class="form-group">
+                    <label for="NIGHT_START">Début Mode Nuit (HH:MM):</label>
+                    <input type="text" id="NIGHT_START" name="NIGHT_START" value="{NIGHT_START}">
+                </div>
+                <div class="form-group">
+                    <label for="NIGHT_END">Fin Mode Nuit (HH:MM):</label>
+                    <input type="text" id="NIGHT_END" name="NIGHT_END" value="{NIGHT_END}">
+                </div>
+                <div class="form-group">
+                    <label for="NIGHT_POLL_INTERVAL">Intervalle de lecture Nuit (secondes):</label>
+                    <input type="number" id="NIGHT_POLL_INTERVAL" name="NIGHT_POLL_INTERVAL" value="{NIGHT_POLL_INTERVAL}">
+                </div>
+                </div>
 
             <div class="section">
                 <h2>JSY-MK-194 (Local Wired)</h2>
