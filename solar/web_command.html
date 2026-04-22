@@ -177,6 +177,7 @@
     </div>
 
     <div id="errorBox" class="error-box"></div>
+    <div id="nightBox" class="error-box" style="background: #2c3e50; border: 1px solid #34495e;">Pas de production possible (Mode Nuit)</div>
 
     <div class="cards">
         <div class="card">
@@ -217,6 +218,12 @@
         </div>
     </div>
 
+    <div id="todaySummary" style="font-size: 0.75em; color: #666; text-align: center; margin-top: 15px; letter-spacing: 0.05em; opacity: 0.8;">
+        Aujourd'hui : <span id="sumImport" style="color:#e74c3c">—</span> réseau | 
+        <span id="sumRedirect" style="color:#2ecc71">—</span> redirigé | 
+        <span id="sumExport" style="color:#f1c40f">—</span> injecté
+    </div>
+
     <div id="chartCard" class="chart-card" style="display: none;">
         <canvas id="powerChart"></canvas>
     </div>
@@ -231,10 +238,12 @@
 
     <div class="footer">
         <a href="/web_config">Configuration</a>
+        <a href="/stats" style="background:#f0c040; color:#1a1a2e; font-weight:bold;">Statistiques</a>
         <a href="/livelog">Live Log</a>
         <a href="/file_management">Fichiers</a>
         <a href="/RESET_device" onclick="return confirm('Redémarrer le device ?')">Reset</a>
     </div>
+    <div style="text-align: center; font-size: 0.7em; color: #555; margin-top: 15px;">Version {VERSION}</div>
 
     <script>
         let powerChart = null;
@@ -292,6 +301,18 @@
                         fanBadge.textContent = 'Ventilateur: ' + d.fan_percent + '%';
                     }}
                 }}
+
+                // Update summary totals (Wh to kWh)
+                if (d.total_import !== undefined) {{
+                    document.getElementById('sumImport').textContent = (d.total_import / 1000).toFixed(2) + ' kWh';
+                    document.getElementById('sumRedirect').textContent = (d.total_redirect / 1000).toFixed(2) + ' kWh';
+                    document.getElementById('sumExport').textContent = (d.total_export / 1000).toFixed(2) + ' kWh';
+                }}
+
+                // Night Mode
+                const nightBox = document.getElementById('nightBox');
+                nightBox.style.display = d.night_mode ? 'block' : 'none';
+                document.getElementById('dateTime').style.display = d.night_mode ? 'none' : 'block';
 
                 // Safe State
                 const ssBox = document.getElementById('safeStateBox');
