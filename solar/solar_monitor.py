@@ -518,18 +518,21 @@ async def monitor_loop():
             # Timezone-aware minutes since midnight (Paris)
             curr_min = d_u.get_paris_time_minutes()
             
-            # Night mode logic
-            n_start_str = getattr(c_v, 'NIGHT_START', "22:00")
-            n_end_str = getattr(c_v, 'NIGHT_END', "05:50")
-            
-            # Use _time_to_minutes to handle HH:MM parsing
-            night_start = _time_to_minutes(n_start_str)
-            night_end = _time_to_minutes(n_end_str)
-            
-            if night_start < night_end:
-                is_night = (night_start <= curr_min < night_end)
-            else: # Overnight range (e.g. 22:00 to 06:00)
-                is_night = (curr_min >= night_start or curr_min < night_end)
+            # Night mode logic (disabled if FAKE_SHELLY is active for development)
+            if getattr(c_v, 'FAKE_SHELLY', False):
+                is_night = False
+            else:
+                n_start_str = getattr(c_v, 'NIGHT_START', "22:00")
+                n_end_str = getattr(c_v, 'NIGHT_END', "05:50")
+                
+                # Use _time_to_minutes to handle HH:MM parsing
+                night_start = _time_to_minutes(n_start_str)
+                night_end = _time_to_minutes(n_end_str)
+                
+                if night_start < night_end:
+                    is_night = (night_start <= curr_min < night_end)
+                else: # Overnight range (e.g. 22:00 to 06:00)
+                    is_night = (curr_min >= night_start or curr_min < night_end)
             
             if is_night != night_mode:
                 night_mode = is_night
