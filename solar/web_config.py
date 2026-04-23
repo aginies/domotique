@@ -41,6 +41,7 @@ def get_config():
         "EQUIPMENT_MAX_POWER": config_var.EQUIPMENT_MAX_POWER,
         "DEADBAND_W": getattr(config_var, 'DEADBAND_W', 30),
         "RAMP_DOWN_NUDGE": getattr(config_var, 'RAMP_DOWN_NUDGE', 0.01),
+        "TRANSIENT_RESET_THRESHOLD": getattr(config_var, 'TRANSIENT_RESET_THRESHOLD', 200),
         "EXPORT_SETPOINT": config_var.EXPORT_SETPOINT,
         "PID_KP": config_var.PID_KP,
         "PID_KI": config_var.PID_KI,
@@ -81,6 +82,7 @@ def get_config():
         "E_FAN": getattr(config_var, 'E_FAN', False),
         "FAN_PIN": getattr(config_var, 'FAN_PIN', 5),
         "FAN_TEMP_OFFSET": getattr(config_var, 'FAN_TEMP_OFFSET', 10),
+        "FAKE_SHELLY": getattr(config_var, 'FAKE_SHELLY', False),
         "VERSION": version,
     }
 
@@ -114,6 +116,8 @@ def serve_config_page(IP_ADDR, WS_PORT, reboot_needed=False):
         'mqtt_retain_no':    'selected' if config_var.MQTT_RETAIN is False else '',
         'fan_yes':           'selected' if getattr(config_var, 'E_FAN', False) is True  else '',
         'fan_no':            'selected' if getattr(config_var, 'E_FAN', False) is False else '',
+        'fake_shelly_yes':   'selected' if getattr(config_var, 'FAKE_SHELLY', False) is True  else '',
+        'fake_shelly_no':    'selected' if getattr(config_var, 'FAKE_SHELLY', False) is False else '',
         'IP_ADDR': IP_ADDR,
         'WS_PORT': WS_PORT,
         'reboot_banner': '<div class="reboot-banner">Configuration sauvegardée. Redémarrage nécessaire pour appliquer les changements.</div>' if reboot_needed else '',

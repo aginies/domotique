@@ -258,6 +258,18 @@
                         <label for="PID_KI">Gain intégral Ki:</label>
                         <input type="number" step="0.01" id="PID_KI" name="PID_KI" value="{PID_KI}">
                     </div>
+                    <div class="form-group">
+                        <label for="DEADBAND_W">Zone morte (W, ± autour consigne):</label>
+                        <input type="number" id="DEADBAND_W" name="DEADBAND_W" value="{DEADBAND_W}">
+                    </div>
+                    <div class="form-group">
+                        <label for="RAMP_DOWN_NUDGE">Nudge descente (0.01 = 1%):</label>
+                        <input type="number" step="0.001" id="RAMP_DOWN_NUDGE" name="RAMP_DOWN_NUDGE" value="{RAMP_DOWN_NUDGE}">
+                    </div>
+                    <div class="form-group">
+                        <label for="TRANSIENT_RESET_THRESHOLD">Seuil Reset PI sur transitoire (W):</label>
+                        <input type="number" id="TRANSIENT_RESET_THRESHOLD" name="TRANSIENT_RESET_THRESHOLD" value="{TRANSIENT_RESET_THRESHOLD}">
+                    </div>
                     <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
 
                     <h3>Mode Forcé & Nuit</h3>
@@ -410,6 +422,20 @@
                     <div class="form-group">
                         <label for="RELAY_PIN">Relay Pin (enable circuit):</label>
                         <input type="number" id="RELAY_PIN" name="RELAY_PIN" value="{RELAY_PIN}">
+                    </div>
+                </div>
+            </details>
+
+            <!-- 4. PARTIE EXPÉRIMENTALE -->
+            <details>
+                <summary>🛠 Expérimental</summary>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label for="FAKE_SHELLY">Activer FAKE_SHELLY (Mode simulation):</label>
+                        <select id="FAKE_SHELLY" name="FAKE_SHELLY">
+                            <option value="True"  {fake_shelly_yes}>True</option>
+                            <option value="False" {fake_shelly_no}>False</option>
+                        </select>
                     </div>
                 </div>
             </details>
