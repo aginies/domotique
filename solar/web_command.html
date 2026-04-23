@@ -6,21 +6,55 @@
     <title>Solaire</title>
     <script src="/chart.min.js"></script>
     <style>
+        :root {{
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --text-color: #eee;
+            --accent-color: #f0c040;
+            --muted-text: #aaa;
+            --log-bg: #0d0d1a;
+            --border-color: #333;
+        }}
+        
+        body.light-mode {{
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --accent-color: #e67e22;
+            --muted-text: #666;
+            --log-bg: #f9f9f9;
+            --border-color: #ddd;
+        }}
+
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
             font-family: Arial, sans-serif;
-            background-color: #1a1a2e;
-            color: #eee;
+            background-color: var(--bg-color);
+            color: var(--text-color);
             padding: 20px;
+            transition: background 0.3s, color 0.3s;
         }}
         .header {{
             text-align: center;
             margin-bottom: 24px;
             position: relative;
         }}
-        h1 {{ color: #f0c040; font-size: 1.6em; }}
-        #dateTime {{ font-size: 0.9em; color: #aaa; margin-top: 4px; }}
+        h1 {{ color: var(--accent-color); font-size: 1.6em; }}
+        #dateTime {{ font-size: 0.9em; color: var(--muted-text); margin-top: 4px; }}
         
+        #themeToggle {{
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--accent-color);
+            padding: 5px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }}
+
         .mqtt-badge {{
             display: inline-block;
             padding: 2px 8px;
@@ -45,25 +79,27 @@
             margin-right: auto;
         }}
         .card {{
-            background: #16213e;
+            background: var(--card-bg);
             border-radius: 12px;
             padding: 24px 16px;
             flex: 1 1 180px;
             min-width: 150px;
             text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color);
         }}
         .chart-card {{
-            background: #16213e;
+            background: var(--card-bg);
             border-radius: 12px;
             padding: 16px;
             max-width: 800px;
             margin: 0 auto 24px auto;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            border: 1px solid var(--border-color);
         }}
         .card .label {{
             font-size: 0.85em;
-            color: #aaa;
+            color: var(--muted-text);
             margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -76,10 +112,11 @@
             font-size: 2em;
             font-weight: bold;
         }}
-        .card .unit {{ font-size: 0.7em; color: #aaa; margin-left: 4px; }}
+        .card .unit {{ font-size: 0.7em; color: var(--muted-text); margin-left: 4px; }}
         .positive {{ color: #e74c3c; }}
-        .negative {{ color: #ff9800; }}
-        .neutral  {{ color: #f0c040; }}
+        .negative {{ color: #2ecc71; }}
+        .neutral  {{ color: var(--accent-color); }}
+        
         .badge {{
             display: inline-block;
             padding: 4px 14px;
@@ -91,6 +128,55 @@
         .badge-on  {{ background: #27ae60; color: #fff; }}
         .badge-off {{ background: #555; color: #ccc; }}
         .badge-force {{ background: #e67e22; color: #fff; }}
+
+        /* Collapsible Details Styles */
+        details.collapsible-box {{
+            max-width: 800px;
+            margin: 0 auto 15px auto;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }}
+        details.collapsible-box summary {{
+            padding: 12px 15px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95em;
+            background: #0f3460;
+            color: #f0c040;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #f0c040;
+        }}
+        details.collapsible-box summary {{
+            list-style: none;
+        }}
+        details.collapsible-box summary::-webkit-details-marker {{ display: none; }}
+        summary::after {{
+            content: '▶';
+            font-size: 0.7em;
+            display: inline-block;
+            transition: transform 0.3s;
+            color: #f0c040;
+        }}
+        details[open] summary::after {{
+            transform: rotate(90deg);
+        }}
+
+        .health-content {{
+            padding: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            font-size: 0.85em;
+        }}
+        .health-item {{ display: flex; flex-direction: column; }}
+        .health-label {{ color: var(--muted-text); font-size: 0.8em; margin-bottom: 2px; }}
+        .health-value {{ font-weight: bold; color: var(--text-color); }}
+
         .error-box {{
             background: #c0392b;
             color: #fff;
@@ -120,47 +206,42 @@
         
         /* Tab Styles */
         .tab-container {{
-            max-width: 800px;
-            margin: 16px auto 0 auto;
             display: flex;
             gap: 5px;
+            padding: 10px 15px 0 15px;
+            background: var(--card-bg);
         }}
         .tab-btn {{
             background: #0f3460;
             color: #aaa;
             border: none;
-            padding: 8px 16px;
-            border-radius: 8px 8px 0 0;
+            padding: 6px 12px;
+            border-radius: 6px 6px 0 0;
             cursor: pointer;
-            font-size: 0.85em;
+            font-size: 0.8em;
             font-weight: bold;
         }}
         .tab-btn.active {{
-            background: #0d0d1a;
-            color: #f0c040;
-            border-bottom: 2px solid #f0c040;
+            background: var(--log-bg);
+            color: var(--accent-color);
+            border-bottom: 2px solid var(--accent-color);
         }}
 
         .log-box {{
-            background: #0d0d1a;
-            border-radius: 0 8px 8px 8px;
+            background: var(--log-bg);
             padding: 12px;
-            height: 180px;
+            height: 200px;
             overflow-y: auto;
             scrollbar-width: none;
-            -ms-overflow-style: none;
             font-size: 0.78em;
             font-family: monospace;
-            color: #ccc;
+            color: var(--text-color);
             white-space: pre-wrap;
-            max-width: 800px;
-            margin: 0 auto 16px auto;
             line-height: 1.4;
+            display: flex;
+            flex-direction: column;
         }}
-        .log-box::-webkit-scrollbar {{
-            display: none;
-        }}
-        .log-entry {{ display: block; margin-bottom: 2px; }}
+        .log-entry {{ display: block; margin-bottom: 2px; width: 100%; }}
         .log-safety {{ color: #ff4d4d; font-weight: bold; }}
         .log-error  {{ color: #ff4d4d; }}
         .log-force  {{ color: #ffa500; }}
@@ -173,11 +254,15 @@
     <div class="header">
         <h1>Gestion Solaire</h1>
         <div id="dateTime">--/--/---- --:--</div>
-        <div id="mqttStatus" class="mqtt-badge mqtt-off" style="display: none;">MQTT: --</div>
+        <button id="themeToggle" onclick="toggleTheme()">☀️ Mode</button>
+        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+            <div id="shellyStatus" class="mqtt-badge mqtt-off">SHELLY: --</div>
+            <div id="mqttStatus" class="mqtt-badge mqtt-off" style="display: none;">MQTT: --</div>
+        </div>
     </div>
 
     <div id="errorBox" class="error-box"></div>
-    <div id="nightBox" class="error-box" style="background: #2c3e50; border: 1px solid #34495e;">Pas de production possible (Mode Nuit)</div>
+    <div id="nightBox" class="error-box" style="background: #2c3e50; border: 1px solid #34495e;">Pas de production possible (Mode Nuit) [<span id="nightTime">--:--</span>]</div>
 
     <div class="cards">
         <div class="card">
@@ -230,11 +315,36 @@
 
     <div id="safeStateBox" class="error-box"></div>
     
-    <div class="tab-container">
-        <button id="tabSys" class="tab-btn active" onclick="setLogMode('sys')">Log Système</button>
-        <button id="tabData" class="tab-btn" onclick="setLogMode('data')">Log Données (1m)</button>
-    </div>
-    <div class="log-box" id="logBox">Chargement...</div>
+    <details class="collapsible-box" id="logDetails">
+        <summary>Journaux (Logs)</summary>
+        <div class="tab-container">
+            <button id="tabSys" class="tab-btn active" onclick="setLogMode('sys')">Système</button>
+            <button id="tabData" class="tab-btn" onclick="setLogMode('data')">Données (1m)</button>
+        </div>
+        <div class="log-box" id="logBox">Chargement...</div>
+    </details>
+
+    <details class="collapsible-box">
+        <summary>Santé du Système</summary>
+        <div class="health-content">
+            <div class="health-item">
+                <span class="health-label">WiFi RSSI</span>
+                <span class="health-value" id="healthRssi">— dBm</span>
+            </div>
+            <div class="health-item">
+                <span class="health-label">CPU Temp</span>
+                <span class="health-value" id="healthCpuTemp">— °C</span>
+            </div>
+            <div class="health-item">
+                <span class="health-label">RAM Libre</span>
+                <span class="health-value" id="healthRam">— KB</span>
+            </div>
+            <div class="health-item">
+                <span class="health-label">Uptime</span>
+                <span class="health-value" id="healthUptime">—</span>
+            </div>
+        </div>
+    </details>
 
     <div class="footer">
         <a href="/web_config">Configuration</a>
@@ -243,7 +353,9 @@
         <a href="/file_management">Fichiers</a>
         <a href="/RESET_device" onclick="return confirm('Redémarrer le device ?')">Reset</a>
     </div>
-    <div style="text-align: center; font-size: 0.7em; color: #555; margin-top: 15px;">Version {VERSION}</div>
+    <div style="text-align: center; font-size: 0.7em; color: #555; margin-top: 15px;">
+        <a href="https://github.com/aginies/domotique/tree/main/solar" target="_blank" style="background:none; color:inherit; padding:0;">Version {VERSION}</a>
+    </div>
 
     <script>
         let powerChart = null;
@@ -312,26 +424,50 @@
                 // Night Mode
                 const nightBox = document.getElementById('nightBox');
                 nightBox.style.display = d.night_mode ? 'block' : 'none';
-                document.getElementById('dateTime').style.display = d.night_mode ? 'none' : 'block';
+                if (d.night_mode) {{
+                    document.getElementById('nightTime').textContent = d.rtc_time;
+                }}
 
                 // Safe State
                 const ssBox = document.getElementById('safeStateBox');
-                ssBox.textContent = 'SAFE STATE: Shelly EM injoignable — redirigé coupé';
-                ssBox.style.display = d.safe_state ? 'block' : 'none';
-
-                // MQTT Status
-                const mqEl = document.getElementById('mqttStatus');
-                if (d.mqtt_status === "disabled") {{
-                    mqEl.style.display = "none";
+                if (d.emergency_mode) {{
+                    ssBox.textContent = 'SOLAR SAFETY: Emergency shutdown — cutting relay and SSR';
+                    ssBox.style.display = 'block';
+                }} else if (d.safe_state) {{
+                    ssBox.textContent = 'SAFE STATE: Shelly EM injoignable — redirigé coupé';
+                    ssBox.style.display = 'block';
                 }} else {{
+                    ssBox.style.display = 'none';
+                }}
+
+                // Shelly Link Status (MQTT mode only)
+                const shEl = document.getElementById('shellyStatus');
+                if (d.shelly_mqtt_enabled) {{
+                    shEl.style.display = "inline-block";
+                    if (d.shelly_link === true) {{
+                        shEl.textContent = "Shelly MQTT: OK";
+                        shEl.className = "mqtt-badge mqtt-ok";
+                    }} else {{
+                        shEl.textContent = "Shelly MQTT: ERR";
+                        shEl.className = "mqtt-badge mqtt-err";
+                    }}
+                }} else {{
+                    shEl.style.display = "none";
+                }}
+
+                // MQTT Broker Status (Emitter)
+                const mqEl = document.getElementById('mqttStatus');
+                if (d.mqtt_enabled) {{
                     mqEl.style.display = "inline-block";
                     if (d.mqtt_status === true) {{
-                        mqEl.textContent = "MQTT: Connecté";
+                        mqEl.textContent = "EMETTEUR MQTT: OK";
                         mqEl.className = "mqtt-badge mqtt-ok";
                     }} else {{
-                        mqEl.textContent = "MQTT: Déconnecté";
+                        mqEl.textContent = "EMETTEUR MQTT: ERR";
                         mqEl.className = "mqtt-badge mqtt-err";
                     }}
+                }} else {{
+                    mqEl.style.display = "none";
                 }}
 
                 // Error Box
@@ -342,13 +478,54 @@
                 }} else {{
                     errBox.style.display = 'none';
                 }}
+
+                // Health Diagnostics
+                document.getElementById('healthRssi').textContent = d.rssi + ' dBm';
+                document.getElementById('healthCpuTemp').textContent = d.esp_temp.toFixed(1) + ' °C';
+                document.getElementById('healthRam').textContent = Math.round(d.free_ram / 1024) + ' KB';
+                
+                const up = d.uptime;
+                const h = Math.floor(up / 3600);
+                const m = Math.floor((up % 3600) / 60);
+                const s = up % 60;
+                document.getElementById('healthUptime').textContent = `${{h}}h ${{m}}m ${{s}}s`;
+
             }} catch(e) {{
                 document.getElementById('errorBox').textContent = 'Erreur réseau: ' + e;
                 document.getElementById('errorBox').style.display = 'block';
             }}
         }}
 
+        function toggleTheme() {{
+            const body = document.body;
+            const btn = document.getElementById('themeToggle');
+            const isLight = body.classList.toggle('light-mode');
+            btn.textContent = isLight ? '🌙 Dark' : '☀️ Light';
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            if (powerChart) updateChartStyle();
+        }}
+
+        // Initialize theme
+        if (localStorage.getItem('theme') === 'light') {{
+            document.body.classList.add('light-mode');
+            document.getElementById('themeToggle').textContent = '🌙 Dark';
+        }}
+
+        function updateChartStyle() {{
+            if (!powerChart) return;
+            const isLight = document.body.classList.contains('light-mode');
+            const textColor = isLight ? '#333' : '#ccc';
+            const gridColor = isLight ? '#eee' : '#333';
+            
+            powerChart.options.scales.x.ticks.color = textColor;
+            powerChart.options.scales.x.grid.color = gridColor;
+            powerChart.options.scales.y.ticks.color = textColor;
+            powerChart.options.plugins.legend.labels.color = textColor;
+            powerChart.update();
+        }}
+
         async function updateLog() {{
+            if (!document.getElementById('logDetails').open) return;
             try {{
                 const endpoint = logMode === 'sys' ? '/get_log_action' : '/get_solar_data';
                 const r = await fetch(endpoint);
@@ -510,7 +687,7 @@
         updateLog();
         updateChart();
         updateDateTime();
-        setInterval(updateStatus, 2000);
+        setInterval(updateStatus, 1000);
         setInterval(updateLog, 5000);
         setInterval(updateChart, 5000);
         setInterval(updateDateTime, 5000);
