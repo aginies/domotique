@@ -3,7 +3,7 @@ VERSION := 0.2.0
 
 COMMON_SOURCE_DIR := ../common
 FILES_TO_COPY := domo_wifi.py save_config.py domo_microdot.py domo_utils.py oled_ssd1306.py esp32_led.py web_files_management.py web_log.py web_upload.py ssd1306.py microdot.py microdot_helpers.py microdot_websocket.py domo_socket_server.py paths.py domo_dns.py
-FILES_TO_UPLOAD := config_var.py main.py web_command.py web_config.py solar_monitor.py mqtt_client.py web_command.html web_config.html web_stats.html stats.json wifi_setup.py fake_shelly.py
+FILES_TO_UPLOAD := config_var.py main.py web_command.py web_config.py solar_monitor.py mqtt_client.py web_command.html web_config.html web_stats.html chart.min.js wifi_setup.py fake_shelly.py
 
 PORT ?= /dev/ttyACM0
 AMPY ?= ampy
