@@ -78,11 +78,14 @@ def status(request):
     import utime
     data = {
         "grid_power": s_m.current_grid_power,
-        "equipment_power": s_m.equipment_power,
+        # Derive from current duty so the status always reflects the live duty
+        # cycle, not the burst_control_loop's last cached value (up to 0.5s stale).
+        "equipment_power": round(s_m._current_duty * float(getattr(c_v, 'EQUIPMENT_MAX_POWER', 2000)), 1),
         "equipment_active": s_m.equipment_active,
         "force_mode": s_m.force_mode_active,
         "boost_active": utime.time() < s_m.boost_end_time,
         "safe_state": s_m.safe_state,
+        "emergency_mode": s_m.emergency_mode,
         "shelly_error": s_m.last_shelly_error,
         "water_temp": s_m.current_water_temp,
         "ssr_temp": s_m.current_ssr_temp,
@@ -94,8 +97,22 @@ def status(request):
         "total_redirect": s_m._total_redirect_Wh,
         "total_export": s_m._total_export_Wh,
         "grid_source": s_m.grid_source,
-        "mqtt_status": m_c.is_connected[0] if getattr(c_v, 'E_MQTT', False) is True else "disabled"
+        "mqtt_enabled": getattr(c_v, 'E_MQTT', False),
+        "shelly_mqtt_enabled": getattr(c_v, 'E_SHELLY_MQTT', False),
+        "mqtt_status": m_c.is_connected[0] if getattr(c_v, 'E_MQTT', False) is True else "disabled",
+        "shelly_link": getattr(c_v, 'FAKE_SHELLY', False) or (s_m.last_shelly_error is None and (utime.time() - s_m._last_good_poll) < 30),
+        "esp_temp": esp32.mcu_temperature(),
+        "free_ram": gc.mem_free(),
+        "uptime": utime.ticks_ms() // 1000,
+        "rssi": -100
     }
+    try:
+        import network
+        sta_if = network.WLAN(network.STA_IF)
+        if sta_if.isconnected():
+            data["rssi"] = sta_if.status('rssi')
+    except:
+        pass
     return ujson.dumps(data), 200, {"Content-Type": "application/json"}
 
 @ws_app.route('/history', methods=['GET'])
