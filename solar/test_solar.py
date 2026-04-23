@@ -261,10 +261,11 @@ class _Cfg:
     POLL_INTERVAL    = 2
     EQUIPMENT_NAME   = "ECS (EAU CHAUDE)"
     EQUIPMENT_MAX_POWER = 2000
-    POWER_BUFFER     = 50
+    DEADBAND_W       = 30
+    RAMP_DOWN_NUDGE  = 0.01
     EXPORT_SETPOINT  = 0
-    PID_KP           = 0.5
-    PID_KI           = 0.1
+    PID_KP           = 0.05
+    PID_KI           = 0.01
     BURST_PERIOD     = 5
     MIN_POWER_THRESHOLD = 150
     MIN_OFF_TIME     = 30
@@ -302,12 +303,14 @@ def _reset_monitor():
     sm.equipment_active   = False
     sm.force_mode_active  = False
     sm.safe_state         = False
+    sm.emergency_mode     = False
     sm.last_shelly_error  = None
     sm.current_water_temp = None
     sm._current_duty      = 0.0
     sm._last_off_time     = 0
     sm._last_good_poll    = _FakeTime.time()
     sm._safe_state_logged = False
+    sm._midnight_reset_done = False
     sm._pi.reset()
     _log_lines.clear()
 
@@ -323,14 +326,26 @@ def _set_shelly_error(exc=None):
 # ── Helpers that replicate monitor_loop decision logic synchronously ──────────
 # (avoids running the full async loop in unit tests)
 
-def _run_divert_step(grid_power):
-    """Run one diversion step with the given grid_power reading."""
+def _run_divert_step(grid_power, dt=1.0):
+    """Run one diversion step following the 3-region logic."""
     sm.current_grid_power = grid_power
-    surplus = -(grid_power - _cfg_mod.EXPORT_SETPOINT)
-    if surplus < _cfg_mod.MIN_POWER_THRESHOLD:
+    surplus = _cfg_mod.EXPORT_SETPOINT - grid_power
+    # Use raw Watts error to match tuning
+    error = float(surplus)
+    
+    if surplus < _cfg_mod.MIN_POWER_THRESHOLD and sm._current_duty == 0.0:
         sm._current_duty = 0.0
     else:
-        sm._current_duty = min(1.0, surplus / float(_cfg_mod.EQUIPMENT_MAX_POWER))
+        if surplus > _cfg_mod.DEADBAND_W:
+            sm._current_duty = sm._pi.update(error, dt)
+        elif surplus < -_cfg_mod.DEADBAND_W:
+            raw = sm._pi.update(error, dt)
+            nudge = _cfg_mod.RAMP_DOWN_NUDGE
+            sm._current_duty = max(0.0, min(1.0, raw + nudge)) if sm._current_duty > 0.0 else raw
+            if sm._current_duty == 0.0: sm._pi.reset()
+        else:
+            # Hold
+            pass
     return sm._current_duty
 
 # Keep old name as alias so existing test calls still work
@@ -491,22 +506,27 @@ def test_surplus_at_threshold_boundary():
 
 def test_surplus_half_capacity():
     _reset_monitor()
-    # surplus=1000W, EQUIPMENT_MAX=2000W → duty = 1000/2000 = 0.5 (direct mapping)
-    duty = _run_divert_step(-1000.0)
-    check_close("1000W surplus on 2000W equipment → duty=0.5", duty, 0.5, tol=0.001)
+    # 1000W surplus on 2000W equipment -> target duty = 0.5
+    # Since it's a PI, we run it for several steps to let it stabilize near 0.5
+    for _ in range(20): _run_divert_step(-1000.0)
+    duty = sm._current_duty
+    check_close("1000W surplus on 2000W equipment → duty stabilized near 0.5", duty, 0.5, tol=0.05)
 
 def test_surplus_full_capacity():
     _reset_monitor()
-    # surplus=2000W = EQUIPMENT_MAX → duty = 1.0
-    duty = _run_divert_step(-2000.0)
-    check("2000W surplus → duty clamped to 1.0", duty == 1.0)
+    # 2000W surplus -> target duty = 1.0
+    for _ in range(20): _run_divert_step(-2000.0)
+    duty = sm._current_duty
+    check("2000W surplus → duty reached 1.0", duty >= 0.99)
 
 def test_surplus_proportional():
     _reset_monitor()
-    # Direct mapping: duty is stable for constant surplus (no integral drift)
-    duties = [_run_divert_step(-500.0) for _ in range(5)]
-    check("constant surplus → constant duty (no integral drift)",
-          duties[4] == duties[0])
+    # Constant surplus should result in a stabilized duty
+    for _ in range(15): _run_divert_step(-500.0)
+    d1 = sm._current_duty
+    for _ in range(5): _run_divert_step(-500.0)
+    d2 = sm._current_duty
+    check("constant surplus → stable duty", abs(d1 - d2) < 0.001)
 
 def test_export_setpoint_shifts_surplus():
     _reset_monitor()
@@ -1122,14 +1142,10 @@ def test_robust_midnight_reset():
     sm._active_heating_secs = 3600
     sm._hourly_redirect_Wh[12] = 1000.0
     
-    # Mock monitor_loop attributes
-    if not hasattr(sm.monitor_loop, '_midnight_reset_done'):
-        sm.monitor_loop._midnight_reset_done = False
-        
     # 1. At midnight
     curr_min = 0
     if curr_min == 0:
-        if not sm.monitor_loop._midnight_reset_done:
+        if not sm._midnight_reset_done:
             sm._total_import_Wh = 0.0
             sm._total_redirect_Wh = 0.0
             sm._total_export_Wh = 0.0
@@ -1137,16 +1153,16 @@ def test_robust_midnight_reset():
             sm._hourly_redirect_Wh = [0.0] * 24
             sm._hourly_export_Wh = [0.0] * 24
             sm._active_heating_secs = 0
-            sm.monitor_loop._midnight_reset_done = True
+            sm._midnight_reset_done = True
             
     check("Midnight: Counters reset despite 0 import", sm._total_redirect_Wh == 0.0)
     check("Midnight: Export reset", sm._total_export_Wh == 0.0)
     check("Midnight: Active time reset", sm._active_heating_secs == 0)
-    check("Midnight: Latch set", sm.monitor_loop._midnight_reset_done is True)
+    check("Midnight: Latch set", sm._midnight_reset_done is True)
     
     # 2. Still midnight (next loop)
     if curr_min == 0:
-        if not sm.monitor_loop._midnight_reset_done:
+        if not sm._midnight_reset_done:
             # Should not run
             sm._total_redirect_Wh = 999 
             
@@ -1155,8 +1171,8 @@ def test_robust_midnight_reset():
     # 3. Past midnight
     curr_min = 1
     if curr_min != 0:
-        sm.monitor_loop._midnight_reset_done = False
-    check("Past midnight: Latch cleared", sm.monitor_loop._midnight_reset_done is False)
+        sm._midnight_reset_done = False
+    check("Past midnight: Latch cleared", sm._midnight_reset_done is False)
 
 def test_stats_pruning():
     # Mocking stats dictionary
