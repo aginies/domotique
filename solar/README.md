@@ -16,6 +16,7 @@ A high-performance Photovoltaic (PV) Router designed for ESP32. It optimizes sel
     - Mechanical relay protection: Keeps the circuit open when idle to reduce SSR wear and provide a hardware safety cutoff.
     - Watchdog timer: Automatically cuts power if the grid meter (Shelly/JSY) becomes unreachable.
 - **Rich Web Interface**:
+    - **Dual Status Monitoring**: Clearly distinguishes between the **Data Source** (Shelly/JSY link status) and the **Home Assistant Integration** (MQTT Broker connection status).
     - Real-time power dashboard with color-coded interactive graphs (Chart.js).
     - Dynamic logs with auto-scrolling and keyword colorization.
     - **Manual Boost** mode (1h, 2h, or 3h) and daily scheduled windows.
