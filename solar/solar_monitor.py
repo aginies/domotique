@@ -5,7 +5,6 @@ import asyncio
 import ujson
 import utime
 import esp32
-import gc
 from machine import Pin
 
 import config_var as c_v
@@ -953,9 +952,6 @@ async def monitor_loop():
                 await asyncio.sleep(0.5) # Fast check for new MQTT pushes
             else:
                 await asyncio.sleep(poll_int)
-
-            # --- Heap RAM cleanup (CRITICAL for long-term stability) ---
-            gc.collect()
 
         except Exception as err:
             d_u.print_and_store_log(f"SOLAR monitor loop critical error: {err}")

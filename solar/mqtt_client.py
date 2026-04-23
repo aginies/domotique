@@ -114,7 +114,6 @@ def _send_discovery(client, node_id):
         # CRITICAL: Explicitly encode payload to bytes
         payload = ujson.dumps(s).encode("utf-8")
         client.publish(disc_topic, payload, retain=True)
-        gc.collect()
         utime.sleep_ms(500)
 
     _discovery_sent = True
@@ -216,6 +215,10 @@ def _worker():
             # Short sleep so reconnection completes well within SHELLY_TIMEOUT.
             utime.sleep_ms(2000)
 
+        # GC runs here — only place in the worker where no live intermediate
+        # objects sit on the C stack. Never call gc.collect() from the main
+        # asyncio thread: Core 0 and Core 1 sharing the GC causes LoadProhibited.
+        gc.collect()
         utime.sleep_ms(100)
 
 def _ensure_thread():
