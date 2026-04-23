@@ -403,7 +403,7 @@
                     labels: labels,
                     datasets: [
                         { label: 'Réseau (Import) (kWh)', data: importData,   backgroundColor: gradImport,   borderColor: '#e74c3c', borderWidth: 1, borderRadius: 6 },
-                        { label: 'Solaire utilisé (kWh)', data: redirectData, backgroundColor: gradRedirect, borderColor: '#2ecc71', borderWidth: 1, borderRadius: 6 },
+                        { label: 'Solaire redirigé (kWh)', data: redirectData, backgroundColor: gradRedirect, borderColor: '#2ecc71', borderWidth: 1, borderRadius: 6 },
                         { label: 'Injecté (Export) (kWh)', data: exportData,  backgroundColor: gradExport,   borderColor: '#f1c40f', borderWidth: 1, borderRadius: 6 }
                     ]
                 },
@@ -426,7 +426,7 @@
             pieChart = new Chart(ctxPie, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Réseau (Import)', 'Solaire utilisé', 'Injecté (Export)'],
+                    labels: ['Réseau (Import)', 'Solaire redirigé', 'Injecté (Export)'],
                     datasets: [{
                         data: [tImp, tRed, tExp],
                         backgroundColor: ['#e74c3c', '#2ecc71', '#f1c40f'],
