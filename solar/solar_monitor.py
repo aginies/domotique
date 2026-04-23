@@ -18,9 +18,11 @@ equipment_power = 0.0      # watts currently sent to equipment
 equipment_active = False
 force_mode_active = False
 safe_state = False         # True when Shelly unreachable > SHELLY_TIMEOUT
+emergency_mode = False     # True if hardware safety cutoff (overheat) is active
 last_shelly_error = None
 current_water_temp = None  # °C from DS18B20, None if not available
 current_ssr_temp = None    # °C from DS18B20 on heatsink, None if not available
+current_esp_temp = 0.0     # °C from internal sensor
 fan_active = False         # SSR Cooling fan status
 fan_percent = 0            # SSR Cooling fan speed percentage (0-100)
 grid_source = "MQTT"       # "MQTT" or "HTTP"
@@ -40,7 +42,7 @@ _last_mqtt_report = 0      # utime.time() of last MQTT report
 _last_data_log_time = 0    # utime.time() of last solar_data.txt write
 _last_pi_time = 0          # utime.ticks_ms() of last PI update
 _last_temp_read = 0        # utime.time() of last DS18B20 read
-_in_surplus = False        # True when grid was negative last iteration (surplus zone)
+_in_surplus = False        # unused, kept for compatibility
 
 # Statistics & Flash Protection state
 _solar_data_buffer = []    # RAM buffer for solar_data.txt
@@ -272,18 +274,10 @@ async def _read_temps():
 
 async def _get_shelly_power_async():
     """ Non-blocking HTTP GET for Shelly EM status with timeouts """
-    is_fake = getattr(c_v, 'FAKE_SHELLY', False)
-    if is_fake:
-        try:
-            import fake_shelly
-            return float(fake_shelly.simulated_power)
-        except Exception:
-            # Fallback to local socket if module read fails
-            target_ip = "127.0.0.1"
-            target_port = 8081
-    else:
-        target_ip = c_v.SHELLY_EM_IP
-        target_port = 80
+    # FAKE_SHELLY is intercepted in monitor_loop before HTTP is ever called.
+    # This function only runs for real HTTP Shelly devices.
+    target_ip   = c_v.SHELLY_EM_IP
+    target_port = 80
     
     try:
         # Wrap connection in a 5s timeout
@@ -501,7 +495,7 @@ async def monitor_loop():
     global current_grid_power, equipment_power, force_mode_active, safe_state, equipment_active
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
     global current_water_temp, current_ssr_temp, grid_source, _last_data_log_time, _last_pi_time
-    global _last_temp_read, fan_active, fan_percent, _in_surplus, _jsy
+    global _last_temp_read, fan_active, fan_percent, _jsy
     global _total_import_Wh, _total_redirect_Wh, _hourly_import_Wh, _hourly_redirect_Wh
     global _total_export_Wh, _hourly_export_Wh, _active_heating_secs, _last_stats_save
     global _solar_data_buffer, night_mode, _midnight_reset_done
@@ -573,11 +567,13 @@ async def monitor_loop():
 
             # ── ESP32 Temperature safety cutoff ───────────────────────────────
             esp_temp = esp32.mcu_temperature()
+            current_esp_temp = esp_temp
             max_esp_temp = getattr(c_v, 'MAX_ESP32_TEMP', 70.0)
             if esp_temp >= max_esp_temp:
                 d_u.print_and_store_log(
                     f"SOLAR SAFETY: ESP32 {esp_temp:.1f}C >= {max_esp_temp}C — equipment OFF"
                 )
+                emergency_mode = True
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -616,6 +612,7 @@ async def monitor_loop():
                 d_u.print_and_store_log(
                     f"SOLAR SAFETY: water {current_water_temp}°C >= {max_water_temp}°C — equipment OFF"
                 )
+                emergency_mode = True
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -628,6 +625,7 @@ async def monitor_loop():
                 d_u.print_and_store_log(
                     f"SOLAR SAFETY: SSR {current_ssr_temp}°C >= {max_ssr_temp}°C — equipment OFF"
                 )
+                emergency_mode = True
                 _current_duty = 0.0
                 _emergency_shutdown()
                 _publish_status_mqtt()
@@ -639,112 +637,130 @@ async def monitor_loop():
             if _relay.value() == 0 and not safe_state:
                 d_u.print_and_store_log("SOLAR SAFETY: conditions back to normal — re-enabling relay")
                 _relay.value(1)
+                emergency_mode = False
 
             # ── Grid Power Retrieval ──────────────────────────────────────────
-            # 1. Try JSY (Wired UART) first if enabled
-            use_shelly = True
-            if getattr(c_v, 'E_JSY', False):
-                # Import and Init on first run
-                global _jsy
-                if _jsy is None:
-                    from jsy_mk194 import JSY_MK194
-                    _jsy = JSY_MK194(c_v.JSY_UART_ID, c_v.JSY_TX, c_v.JSY_RX)
-                    d_u.print_and_store_log("SOLAR: JSY-MK-194 initialized")
-
-                jsy_data = _jsy.read_data()
-                if jsy_data:
-                    current_grid_power, equipment_power = jsy_data
-                    if grid_source != "JSY":
-                        d_u.print_and_store_log("SOLAR: JSY-MK-194 grid source active")
-                    grid_source = "JSY"
+            if getattr(c_v, 'FAKE_SHELLY', False):
+                # Direct in-process read — no socket, no MQTT, overrides E_JSY /
+                # E_SHELLY_MQTT so FAKE_SHELLY works regardless of other source flags.
+                try:
+                    import fake_shelly as _fs_mod
+                    current_grid_power = float(_fs_mod._grid_power)
                     last_shelly_error = None
-                    _last_good_poll = now
-                    use_shelly = False
-                    if safe_state:
-                        d_u.print_and_store_log("SOLAR JSY-MK-194 recovered — resuming control")
-                        _pi.reset()
-                    safe_state = False
-                else:
-                    # JSY error: wait for next poll
-                    if (now - _last_good_poll) >= watchdog_timeout:
-                        if not _safe_state_logged:
-                            d_u.print_and_store_log("SOLAR WATCHDOG: JSY-MK-194 timeout — safe-state")
-                            _safe_state_logged = True
-                            _pi.reset()
-                        safe_state = True
-                        _current_duty = 0.0
-                        _emergency_shutdown()
-                    await asyncio.sleep(0.1)
-                    continue
-
-            # 2. Try MQTT if enabled and JSY not used
-            if getattr(c_v, 'E_SHELLY_MQTT', False):
-                # --- MQTT SOURCE ---
-                mqtt_val = m_c.latest_mqtt_grid_power[0]
-                # In night mode, we only process MQTT data if poll_int (60s) has passed
-                time_since_poll = now - _last_good_poll
-                if mqtt_val is not None and (not night_mode or time_since_poll >= poll_int):
-                    # Fresh data received or interval reached: consume
-                    m_c.latest_mqtt_grid_power[0] = None
-
-                    if grid_source != "MQTT":
-                        d_u.print_and_store_log("SOLAR: MQTT grid source active")
-                    grid_source = "MQTT"
-                    current_grid_power = mqtt_val
-                    last_shelly_error = None
-                    _last_good_poll = now
-                    if safe_state:
-                        d_u.print_and_store_log("SOLAR Shelly MQTT recovered — resuming control")
-                        _relay.value(1)
-                        _pi.reset()
-                        _safe_state_logged = False
-                    safe_state = False
-                else:
-                    # No new data: check for timeout then skip PI logic
-                    if (now - _last_good_poll) >= watchdog_timeout:
-                        if not _safe_state_logged:
-                            d_u.print_and_store_log("SOLAR WATCHDOG: No MQTT data from Shelly — safe-state")
-                            _safe_state_logged = True
-                            _pi.reset()
-                        if not safe_state:
-                            _emergency_shutdown()
-                        safe_state = True
-                        _current_duty = 0.0
-                    await asyncio.sleep(0.1)
-                    continue
+                except Exception as _e:
+                    last_shelly_error = str(_e)
+                if grid_source != "FAKE":
+                    grid_source = "FAKE"
+                    d_u.print_and_store_log("SOLAR: FAKE_SHELLY grid source active")
+                _last_good_poll = now
+                safe_state = False
+                _safe_state_logged = False
 
             else:
-                # --- STRICT HTTP MODE ---
-                if grid_source != "HTTP":
-                    grid_source = "HTTP"
-                    d_u.print_and_store_log("SOLAR: HTTP grid source active")
+                # 1. Try JSY (Wired UART) first if enabled
+                use_shelly = True
+                if getattr(c_v, 'E_JSY', False):
+                    # Import and Init on first run
+                    global _jsy
+                    if _jsy is None:
+                        from jsy_mk194 import JSY_MK194
+                        _jsy = JSY_MK194(c_v.JSY_UART_ID, c_v.JSY_TX, c_v.JSY_RX)
+                        d_u.print_and_store_log("SOLAR: JSY-MK-194 initialized")
 
-                # Wait for poll interval
-                if (now - _last_good_poll) >= poll_int:
-                    try:
-                        current_grid_power = await _get_shelly_power_async()
-                        last_shelly_error  = None
-                        _last_good_poll    = now
+                    jsy_data = _jsy.read_data()
+                    if jsy_data:
+                        current_grid_power, equipment_power = jsy_data
+                        if grid_source != "JSY":
+                            d_u.print_and_store_log("SOLAR: JSY-MK-194 grid source active")
+                        grid_source = "JSY"
+                        last_shelly_error = None
+                        _last_good_poll = now
+                        use_shelly = False
                         if safe_state:
-                            d_u.print_and_store_log("SOLAR Shelly HTTP recovered — re-enabling relay")
-                            _relay.value(1)
+                            d_u.print_and_store_log("SOLAR JSY-MK-194 recovered — resuming control")
                             _pi.reset()
-                        safe_state         = False
-                        _safe_state_logged = False
-                    except Exception as err:
-                        last_shelly_error = str(err)
+                        safe_state = False
+                    else:
+                        # JSY error: wait for next poll
                         if (now - _last_good_poll) >= watchdog_timeout:
                             if not _safe_state_logged:
-                                d_u.print_and_store_log("SOLAR WATCHDOG: Shelly HTTP unreachable — safe-state")
+                                d_u.print_and_store_log("SOLAR WATCHDOG: JSY-MK-194 timeout — safe-state")
+                                _safe_state_logged = True
+                                _pi.reset()
+                            safe_state = True
+                            _current_duty = 0.0
+                            _emergency_shutdown()
+                        await asyncio.sleep(0.1)
+                        continue
+
+                # 2. Try MQTT if enabled and JSY not used
+                if getattr(c_v, 'E_SHELLY_MQTT', False):
+                    # --- MQTT SOURCE ---
+                    mqtt_val = m_c.latest_mqtt_grid_power[0]
+                    # In night mode, we only process MQTT data if poll_int (60s) has passed
+                    time_since_poll = now - _last_good_poll
+                    if mqtt_val is not None and (not night_mode or time_since_poll >= poll_int):
+                        # Fresh data received or interval reached: consume
+                        m_c.latest_mqtt_grid_power[0] = None
+
+                        if grid_source != "MQTT":
+                            d_u.print_and_store_log("SOLAR: MQTT grid source active")
+                        grid_source = "MQTT"
+                        current_grid_power = mqtt_val
+                        last_shelly_error = None
+                        _last_good_poll = now
+                        if safe_state:
+                            d_u.print_and_store_log("SOLAR Shelly MQTT recovered — resuming control")
+                            _relay.value(1)
+                            _pi.reset()
+                            _safe_state_logged = False
+                        safe_state = False
+                    else:
+                        # No new data: check for timeout then skip PI logic
+                        if (now - _last_good_poll) >= watchdog_timeout:
+                            if not _safe_state_logged:
+                                d_u.print_and_store_log("SOLAR WATCHDOG: No MQTT data from Shelly — safe-state")
                                 _safe_state_logged = True
                                 _pi.reset()
                             if not safe_state:
                                 _emergency_shutdown()
-                            safe_state    = True
+                            safe_state = True
                             _current_duty = 0.0
+                        await asyncio.sleep(0.1)
+                        continue
+
                 else:
-                    await asyncio.sleep(0.1)
-                    continue
+                    # --- STRICT HTTP MODE ---
+                    if grid_source != "HTTP":
+                        grid_source = "HTTP"
+                        d_u.print_and_store_log("SOLAR: HTTP grid source active")
+
+                    # Wait for poll interval
+                    if (now - _last_good_poll) >= poll_int:
+                        try:
+                            current_grid_power = await _get_shelly_power_async()
+                            last_shelly_error  = None
+                            _last_good_poll    = now
+                            if safe_state:
+                                d_u.print_and_store_log("SOLAR Shelly HTTP recovered — re-enabling relay")
+                                _relay.value(1)
+                                _pi.reset()
+                            safe_state         = False
+                            _safe_state_logged = False
+                        except Exception as err:
+                            last_shelly_error = str(err)
+                            if (now - _last_good_poll) >= watchdog_timeout:
+                                if not _safe_state_logged:
+                                    d_u.print_and_store_log("SOLAR WATCHDOG: Shelly HTTP unreachable — safe-state")
+                                    _safe_state_logged = True
+                                    _pi.reset()
+                                if not safe_state:
+                                    _emergency_shutdown()
+                                safe_state    = True
+                                _current_duty = 0.0
+                    else:
+                        await asyncio.sleep(0.1)
+                        continue
 
             if target_reached and (is_force_equipment or in_window or is_boost):
                 if _current_duty > 0:
@@ -807,34 +823,47 @@ async def monitor_loop():
             if surplus < min_threshold and _current_duty == 0.0:
                 status_tag = "OFF"
             else:
-                # PI drives grid toward EXPORT_SETPOINT.
-                # error > 0: grid below target, ramp equipment up.
-                # error < 0: grid above target, ramp equipment down.
+                # ── 3-region deadband + PI (best of C++ and Python) ──────────
+                # surplus = base_setpoint - grid_power
+                #   > +DEADBAND_W  → Region 1: ramp UP   (clear solar surplus)
+                #   in ±DEADBAND_W → Region 2: HOLD      (stable, freeze integral)
+                #   < -DEADBAND_W  → Region 3: ramp DOWN  (importing too much)
                 error = (base_setpoint - current_grid_power) / max_p
+                deadband_w = float(getattr(c_v, 'DEADBAND_W', 30))
+                transient_threshold = float(getattr(c_v, 'TRANSIENT_RESET_THRESHOLD', 200))
 
-                # Reset integral when grid crosses the setpoint from below (target overshot
-                # or solar suddenly dropped). Prevents integral inertia from delaying response.
-                now_in_surplus = current_grid_power < base_setpoint
-                if _in_surplus and not now_in_surplus and _current_duty > 0.0:
+                # Large-transient guard: grid jumped far above setpoint (e.g. big load on).
+                if (current_grid_power > base_setpoint + transient_threshold
+                        and _current_duty > 0.0):
                     _pi.reset()
                     _store_data_log(
-                        f"SOLAR: grid crossed setpoint (grid={current_grid_power:.0f}W, "
+                        f"SOLAR: large transient (grid={current_grid_power:.0f}W, "
                         f"setpoint={base_setpoint:.0f}W) — PI reset"
                     )
-                _in_surplus = now_in_surplus
 
-                power_buffer = float(getattr(c_v, 'POWER_BUFFER', 0))
-                if power_buffer > 0 and abs(error * max_p) < power_buffer:
-                    # Grid is within POWER_BUFFER watts of setpoint: hold duty.
-                    # Avoids chasing measurement noise when already well-tuned.
-                    status_tag = "HOLD({:.0f}W)".format(_current_duty * max_p)
-                else:
+                if surplus > deadband_w:
+                    # Region 1: clear surplus → ramp equipment UP
                     _current_duty = _pi.update(error, dt)
+                    status_tag = "PI+({:.0f}W)".format(_current_duty * max_p)
+
+                elif surplus < -deadband_w:
+                    # Region 3: importing more than target → ramp equipment DOWN.
+                    # Anti-oscillation nudge (C++ "+1" equivalent): adds a small
+                    # upward offset so the controller doesn't overshoot to 0 on
+                    # small transients and avoids rapid on/off cycling.
+                    raw = _pi.update(error, dt)
+                    nudge = float(getattr(c_v, 'RAMP_DOWN_NUDGE', 0.01))
+                    _current_duty = max(0.0, min(1.0, raw + nudge)) if _current_duty > 0.0 else raw
                     if _current_duty > 0.0:
-                        status_tag = "PI({:.0f}W)".format(_current_duty * max_p)
+                        status_tag = "PI-({:.0f}W)".format(_current_duty * max_p)
                     else:
                         status_tag = "OFF(PI)"
                         _pi.reset()
+
+                else:
+                    # Region 2: within ±DEADBAND_W of setpoint → hold duty.
+                    # Integral is frozen (no _pi.update) so it can't drift.
+                    status_tag = "HOLD({:.0f}W)".format(_current_duty * max_p)
                 
             # ── Energy Accumulation (Wh) ──────────────────────────────────
             # dt is the time in seconds since last loop
