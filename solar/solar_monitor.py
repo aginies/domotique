@@ -194,6 +194,16 @@ def _save_stats_to_file():
     except Exception as e:
         d_u.print_and_store_log(f"STATS: Save error: {e}")
 
+def _store_data_log(msg):
+    """ Stores a message in the RAM buffer for solar_data.txt. """
+    global _solar_data_buffer
+    curr_date = d_u.show_rtc_date()
+    h, m, s = d_u.show_rtc_time()
+    curr_time = "{:02d}:{:02d}:{:02d}".format(h, m, s)
+    _solar_data_buffer.append(f"{curr_date} {curr_time}: {msg}")
+    # Always print to console
+    print(utime.time(), ": ", msg)
+
 def _flush_solar_data():
     """ Writes buffered solar data to flash and handles rotation. """
     global _solar_data_buffer
@@ -488,7 +498,7 @@ async def monitor_loop():
     Polls Shelly EM every POLL_INTERVAL seconds, runs PI controller,
     enforces safety rules, and updates _current_duty for burst_control_loop.
     """
-    global current_grid_power, force_mode_active, safe_state, equipment_active
+    global current_grid_power, equipment_power, force_mode_active, safe_state, equipment_active
     global last_shelly_error, _current_duty, _last_good_poll, _safe_state_logged
     global current_water_temp, current_ssr_temp, grid_source, _last_data_log_time, _last_pi_time
     global _last_temp_read, fan_active, fan_percent, _in_surplus, _jsy
@@ -543,9 +553,24 @@ async def monitor_loop():
             watchdog_timeout = max(getattr(c_v, 'SHELLY_TIMEOUT', 10), poll_int * 3)
             
             max_p = float(getattr(c_v, 'EQUIPMENT_MAX_POWER', 2000))
+            base_setpoint = float(getattr(c_v, 'EXPORT_SETPOINT', 0))
+            min_threshold = float(getattr(c_v, 'MIN_POWER_THRESHOLD', 150))
+            
             status_tag = "WAIT"
             surplus = 0.0
             log_msg = None
+            force_reason = "Unknown"
+            
+            # Mode Selection
+            is_boost = utime.time() < boost_end_time
+            is_force_equipment = getattr(c_v, 'FORCE_EQUIPMENT', False)
+            in_window = _in_force_window() if getattr(c_v, 'E_FORCE_WINDOW', False) else False
+            target_temp = getattr(c_v, 'EQUIPMENT_TARGET_TEMP', 55.0)
+            target_reached = (current_water_temp is not None and current_water_temp >= target_temp)
+            
+            is_forcing = (is_force_equipment or in_window or is_boost) and not target_reached
+            force_mode_active = is_forcing
+
             # ── ESP32 Temperature safety cutoff ───────────────────────────────
             esp_temp = esp32.mcu_temperature()
             max_esp_temp = getattr(c_v, 'MAX_ESP32_TEMP', 70.0)
@@ -721,19 +746,6 @@ async def monitor_loop():
                     await asyncio.sleep(0.1)
                     continue
 
-            # ── Mode Selection ────────────────────────────────────────────
-            is_boost = utime.time() < boost_end_time
-            is_force_equipment = getattr(c_v, 'FORCE_EQUIPMENT', False)
-            
-            # Check temperature target for force/boost
-            target_temp = getattr(c_v, 'EQUIPMENT_TARGET_TEMP', 55.0)
-            target_reached = (current_water_temp is not None and current_water_temp >= target_temp)
-            
-            # Determine if we are forcing (ignoring surplus)
-            in_window = _in_force_window() if getattr(c_v, 'E_FORCE_WINDOW', False) else False
-            is_forcing = (is_force_equipment or in_window or is_boost) and not target_reached
-            force_mode_active = is_forcing
-
             if target_reached and (is_force_equipment or in_window or is_boost):
                 if _current_duty > 0:
                     d_u.print_and_store_log(
@@ -746,10 +758,6 @@ async def monitor_loop():
                 continue
 
             # ── Surplus calculation and diversion ────────────────────────────
-            base_setpoint = float(getattr(c_v, 'EXPORT_SETPOINT', 0))
-            max_p = float(getattr(c_v, 'EQUIPMENT_MAX_POWER', 2000))
-            min_threshold = float(getattr(c_v, 'MIN_POWER_THRESHOLD', 150))
-
             if is_forcing:
                 # Force mode: run at full duty, let burst_control_loop drive the relay
                 _current_duty = 1.0
@@ -779,12 +787,20 @@ async def monitor_loop():
             min_off = getattr(c_v, 'MIN_OFF_TIME', 30)
             if _current_duty == 0.0 and (now - _last_off_time) < min_off:
                 remaining = min_off - (now - _last_off_time)
-                d_u.print_and_store_log(
+                _store_data_log(
                     f"SOLAR [OFF-WAIT {remaining:.0f}s] grid={current_grid_power:.0f}W surplus={surplus:.0f}W"
                 )
                 _publish_status_mqtt()
                 await asyncio.sleep(poll_int)
                 continue
+
+            # Compute dt here so energy accumulation can use it regardless of PI path
+            now_ms = utime.ticks_ms()
+            if _last_pi_time == 0:
+                dt = float(poll_int)
+            else:
+                dt = utime.ticks_diff(now_ms, _last_pi_time) / 1000.0
+            _last_pi_time = now_ms
 
             # Threshold: only prevents *starting* when headroom to setpoint is negligible.
             # Never cut running equipment — the PI's negative error ramps duty down smoothly.
@@ -801,18 +817,11 @@ async def monitor_loop():
                 now_in_surplus = current_grid_power < base_setpoint
                 if _in_surplus and not now_in_surplus and _current_duty > 0.0:
                     _pi.reset()
-                    d_u.print_and_store_log(
+                    _store_data_log(
                         f"SOLAR: grid crossed setpoint (grid={current_grid_power:.0f}W, "
                         f"setpoint={base_setpoint:.0f}W) — PI reset"
                     )
                 _in_surplus = now_in_surplus
-
-                now_ms = utime.ticks_ms()
-                if _last_pi_time == 0:
-                    dt = float(poll_int)
-                else:
-                    dt = utime.ticks_diff(now_ms, _last_pi_time) / 1000.0
-                _last_pi_time = now_ms
 
                 power_buffer = float(getattr(c_v, 'POWER_BUFFER', 0))
                 if power_buffer > 0 and abs(error * max_p) < power_buffer:
@@ -827,28 +836,29 @@ async def monitor_loop():
                         status_tag = "OFF(PI)"
                         _pi.reset()
                 
-                # ── Energy Accumulation (Wh) ──────────────────────────────────
-                # dt is the time in seconds since last loop
-                if dt > 0 and dt < 60: # Avoid spikes from large time jumps
-                    curr_hour = (curr_min // 60) % 24
-                    # 1. Grid import (only when grid > 0)
-                    if current_grid_power > 0:
-                        # Wh = Watts * (seconds / 3600)
-                        delta = current_grid_power * (dt / 3600.0)
-                        _total_import_Wh += delta
-                        _hourly_import_Wh[curr_hour] += delta
-                    # 2. Grid export (only when grid < 0)
-                    elif current_grid_power < 0:
-                        delta = -current_grid_power * (dt / 3600.0)
-                        _total_export_Wh += delta
-                        _hourly_export_Wh[curr_hour] += delta
-                    
-                    # 3. Redirected power
-                    if equipment_power > 0:
-                        delta = equipment_power * (dt / 3600.0)
-                        _total_redirect_Wh += delta
-                        _hourly_redirect_Wh[curr_hour] += delta
-                        _active_heating_secs += dt
+            # ── Energy Accumulation (Wh) ──────────────────────────────────
+            # dt is the time in seconds since last loop
+            # This must happen outside the threshold check to log idle consumption!
+            if dt > 0 and dt < 60: # Avoid spikes from large time jumps
+                curr_hour = (curr_min // 60) % 24
+                # 1. Grid import (only when grid > 0)
+                if current_grid_power > 0:
+                    # Wh = Watts * (seconds / 3600)
+                    delta = current_grid_power * (dt / 3600.0)
+                    _total_import_Wh += delta
+                    _hourly_import_Wh[curr_hour] += delta
+                # 2. Grid export (only when grid < 0)
+                elif current_grid_power < 0:
+                    delta = -current_grid_power * (dt / 3600.0)
+                    _total_export_Wh += delta
+                    _hourly_export_Wh[curr_hour] += delta
+                
+                # 3. Redirected power
+                if equipment_power > 0:
+                    delta = equipment_power * (dt / 3600.0)
+                    _total_redirect_Wh += delta
+                    _hourly_redirect_Wh[curr_hour] += delta
+                    _active_heating_secs += dt
 
             # ── Stats & Log Periodic Flush ──────────────────────────────────
             # 1. Save stats to JSON every 15 minutes (or on day change)
@@ -892,10 +902,7 @@ async def monitor_loop():
             
             # 2. Store to RAM buffer (every 1 minute)
             if log_msg and (now - _last_data_log_time) >= 60:
-                curr_date = d_u.show_rtc_date()
-                h, m, s = d_u.show_rtc_time()
-                curr_time = "{:02d}:{:02d}:{:02d}".format(h, m, s)
-                _solar_data_buffer.append(f"{curr_date} {curr_time}: {log_msg}")
+                _store_data_log(log_msg)
                 _last_data_log_time = now
             
             # 3. Periodic flush of all logs to flash (every 15 minutes)
