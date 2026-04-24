@@ -104,8 +104,16 @@ def status(request):
         "esp_temp": esp32.mcu_temperature(),
         "free_ram": gc.mem_free(),
         "uptime": utime.ticks_ms() // 1000,
-        "rssi": -100
+        "rssi": -100,
+        "control_mode": getattr(c_v, 'CONTROL_MODE', 'burst'),
     }
+    if getattr(c_v, 'CONTROL_MODE', 'burst') == 'phase_angle':
+        try:
+            import phase_control as _pc
+            data["zx_count"]   = _pc.zx_count
+            data["zx_freq_hz"] = round(_pc.zx_freq_hz, 1)
+        except:
+            pass
     try:
         import network
         sta_if = network.WLAN(network.STA_IF)
@@ -421,7 +429,22 @@ async def _start_all(ip, port, error_vars, wifi_watchdog_enabled, wdt):
         await fake_shelly.start_fake_shelly()
 
     asyncio.create_task(s_m.monitor_loop())
-    asyncio.create_task(s_m.burst_control_loop())
+
+    _mode = getattr(c_v, 'CONTROL_MODE', 'burst')
+    if (_mode in ('phase_angle', 'cycle_stealing')
+            and s_m._jsy is not None
+            and s_m._jsy._zx_pin_obj is not None):
+        import phase_control
+        phase_control.start(
+            ssr_pin     = s_m._ssr_pin,
+            jsy_driver  = s_m._jsy,
+            get_duty_fn = lambda: s_m._current_duty
+        )
+    else:
+        if _mode == 'phase_angle':
+            d_u.print_and_store_log("MAIN WARN: Zx non disponible — fallback mode burst")
+        asyncio.create_task(s_m.burst_control_loop())
+
     asyncio.create_task(s_m.history_loop())
     asyncio.create_task(async_oled_show(ip, port, error_vars))
     asyncio.create_task(async_led_status())

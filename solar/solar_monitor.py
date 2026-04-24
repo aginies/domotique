@@ -105,8 +105,23 @@ def init_ssr_relay():
         except Exception as e:
             d_u.print_and_store_log(f"Fan PWM Init Error: {e}")
 
+    # Phase-angle mode: init JSY with Zx pin early so the IRQ is armed before
+    # the control thread starts. monitor_loop lazy-init is skipped (if _jsy is None).
+    if getattr(c_v, 'CONTROL_MODE', 'burst') == 'phase_angle':
+        global _jsy
+        if getattr(c_v, 'E_JSY', False):
+            from jsy_mk194 import JSY_MK194
+            zx_gpio = getattr(c_v, 'ZX_PIN', None)
+            _jsy = JSY_MK194(c_v.JSY_UART_ID, c_v.JSY_TX, c_v.JSY_RX, zx_pin=zx_gpio)
+            d_u.print_and_store_log(f"PHASE: JSY-MK-194G initialisé avec Zx sur pin {zx_gpio}")
+        else:
+            d_u.print_and_store_log(
+                "PHASE WARN: CONTROL_MODE=phase_angle mais E_JSY=False — Zx non disponible"
+            )
+
+    mode_str = getattr(c_v, 'CONTROL_MODE', 'burst')
     d_u.print_and_store_log(
-        f"SSR pin={c_v.SSR_PIN} (digital), Relay pin={c_v.RELAY_PIN} initialized (relay ON)"
+        f"SSR pin={c_v.SSR_PIN} ({mode_str}), Relay pin={c_v.RELAY_PIN} initialized (relay ON)"
     )
 
 
@@ -352,6 +367,12 @@ def _emergency_shutdown():
     d_u.print_and_store_log("SOLAR SAFETY: Emergency shutdown — cutting relay and SSR")
     _ssr_pin.value(0)
     _relay.value(0)
+    if getattr(c_v, 'CONTROL_MODE', 'burst') == 'phase_angle':
+        try:
+            import phase_control
+            phase_control.stop()
+        except:
+            pass
 
 
 def _publish_status_mqtt():
@@ -866,7 +887,13 @@ async def monitor_loop():
                     # Region 2: within ±DEADBAND_W of setpoint → hold duty.
                     # Integral is frozen (no _pi.update) so it can't drift.
                     status_tag = "HOLD({:.0f}W)".format(_current_duty * max_p)
-                
+
+            # Phase-angle mode: burst_control_loop is not running, so update
+            # equipment_power and equipment_active here from the current duty.
+            if getattr(c_v, 'CONTROL_MODE', 'burst') == 'phase_angle':
+                equipment_power  = round(_current_duty * max_p, 1)
+                equipment_active = (_current_duty > 0.0)
+
             # ── Energy Accumulation (Wh) ──────────────────────────────────
             # dt is the time in seconds since last loop
             # This must happen outside the threshold check to log idle consumption!
