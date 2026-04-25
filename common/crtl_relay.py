@@ -37,6 +37,7 @@ def ctrl_relay(which_one, duration):
     """ relay 1 or 2, now non-blocking """
     lock.acquire()
     relay = relay1 if which_one == 1 else relay2
+    shelly_on = False
 
     try:
         with open(paths.IN_PROGRESS_FLAG, 'w') as file:
@@ -49,6 +50,7 @@ def ctrl_relay(which_one, duration):
             if not shelly_control.set_power(c_v.SHELLY_IP, True):
                 d_u.print_and_store_log("ABORT: Shelly connection failed, skipping motor relay.")
                 return
+            shelly_on = True
             utime.sleep(1)
 
         relay.on()
@@ -73,20 +75,20 @@ def ctrl_relay(which_one, duration):
         if relay.value() == 1:
             d_u.print_and_store_log(f"Switching Relay {which_one} as Off")
             relay.off()
-            
-            # Power OFF Shelly if enabled, after a short delay
-            if getattr(c_v, 'CONTROL_SHELLY', False):
-                import shelly_control
-                wait_sec = getattr(c_v, 'DELAY_SHELLY', 3)
-                d_u.print_and_store_log(f"Waiting {wait_sec}s before switching Shelly OFF")
-                utime.sleep(wait_sec)
-                shelly_control.set_power(c_v.SHELLY_IP, False)
 
     except Exception as err:
         d_u.print_and_store_log(f"Error in ctrl_relay({which_one}): {err}")
         relay1.off()
         relay2.off()
     finally:
+        # Power OFF Shelly if it was turned on, after a short delay
+        if shelly_on:
+            import shelly_control
+            wait_sec = getattr(c_v, 'DELAY_SHELLY', 3)
+            d_u.print_and_store_log(f"Waiting {wait_sec}s before switching Shelly OFF")
+            utime.sleep(wait_sec)
+            shelly_control.set_power(c_v.SHELLY_IP, False)
+
         if d_u.file_exists(paths.IN_PROGRESS_FLAG):
             try:
                 os.remove(paths.IN_PROGRESS_FLAG)
@@ -109,6 +111,7 @@ def ctrl_relay_off():
     d_u.print_and_store_log("Relays forced OFF, stop_relay_action set to True.")
     relay1.off()
     relay2.off()
+    emergency_manage_files()
 
 def thread_do_job_crtl_relay(B_text, relay_nb, duration):
     """ Do the thread job for the realy """
