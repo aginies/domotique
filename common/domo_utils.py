@@ -201,42 +201,62 @@ def copy_file(source_path, dest_path):
 
 def get_vars_from_file(config_file):
     """
-    Parses a configuration file and returns a set of variable names.
+    Parses a configuration file and returns a dictionary of variable names and their lines.
     """
-    variables = set()
+    variables = {}
     try:
         with open(config_file, 'r') as f:
             for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
+                stripped_line = line.strip()
+                if stripped_line and not stripped_line.startswith('#') and '=' in stripped_line:
                     # Split at the first '=' to get the variable name
-                    var_name = line.split('=')[0].strip()
-                    variables.add(var_name)
+                    var_name = stripped_line.split('=')[0].strip()
+                    variables[var_name] = line
     except FileNotFoundError:
         print_and_store_log(f"Error: The file '{config_file}' was not found.")
-        sys.exit(1)
     return variables
 
 def check_config_files(old_config_path, new_config_path):
     """
-    Checks if two configuration files have the same variables.
-    If not, it prints the missing variables.
+    Merges the old configuration into the new one.
+    Keeps existing values and adds missing variables from the new config.
     """
     old_vars = get_vars_from_file(old_config_path)
     new_vars = get_vars_from_file(new_config_path)
-    missing_vars = new_vars - old_vars
-
-    if not missing_vars:
+    
+    missing_in_old = [v for v in new_vars if v not in old_vars]
+    
+    if not missing_in_old:
         print_and_store_log("UPDATE: The configuration files have the same variables.")
-        print_and_store_log("UPDATE: Restoring old config file.")
-        copy_file(paths.CONFIG_BACKUP, paths.CONFIG_FILE)
-        os.remove(paths.CONFIG_BACKUP)
+        print_and_store_log("UPDATE: Restoring old config file values.")
+        copy_file(old_config_path, paths.CONFIG_FILE)
+        os.remove(old_config_path)
     else:
-        print_and_store_log("UPDATE WARNING: The old configuration file is missing the following variables:")
-        for var in sorted(list(missing_vars)):
-            print_and_store_log(f" - {var}")
-        print_and_store_log("UPDATE WARNING: Please add these variables to your old configuration file.")
-        print_and_store_log("UPDATE: I can not restore the old config file.")
+        print_and_store_log("UPDATE: Merging configurations...")
+        try:
+            # We want to keep the old file but append the new variables
+            # Let's read the old file content
+            with open(old_config_path, 'r') as f:
+                old_content = f.read()
+            
+            # Append missing variables with their default values from the new config
+            extra_content = "\n# --- Added by System Update ---\n"
+            for var in missing_in_old:
+                print_and_store_log(f"UPDATE: Adding missing variable: {var}")
+                extra_content += new_vars[var]
+            
+            with open(paths.CONFIG_FILE, 'w') as f:
+                f.write(old_content)
+                if not old_content.endswith('\n'):
+                    f.write('\n')
+                f.write(extra_content)
+            
+            print_and_store_log("UPDATE: Configuration merged successfully.")
+            os.remove(old_config_path)
+        except Exception as e:
+            print_and_store_log(f"UPDATE ERROR: Failed to merge config: {e}")
+            print_and_store_log("UPDATE: Keeping new config as fallback.")
+
 
 def manage_update(filename, output_dir):
     """ Function to extract filename bin """
