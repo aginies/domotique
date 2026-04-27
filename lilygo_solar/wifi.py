@@ -39,3 +39,24 @@ def setup_ap():
     ap.config(essid=c_v.AP_SSID, password=c_v.AP_PASSWORD)
     print("AP Active:", c_v.AP_SSID, "IP:", ap.ifconfig()[0])
     return ap.ifconfig()[0]
+
+def ntp_sync():
+    import ntptime
+    import utime
+    import machine
+    print("Syncing NTP...")
+    try:
+        ntptime.settime()
+        # Apply offset if defined in config
+        offset = getattr(c_v, 'TZ_OFFSET', 0)
+        if offset != 0:
+            t = utime.time()
+            tm = utime.localtime(t + offset)
+            # ESP32 RTC.datetime: (year, month, day, weekday, hours, minutes, seconds, subseconds)
+            # utime.localtime: (year, month, day, hour, minute, second, weekday, yearday)
+            machine.RTC().datetime((tm[0], tm[1], tm[2], tm[6], tm[3], tm[4], tm[5], 0))
+        print("NTP Synced. Current time:", utime.localtime())
+        return True
+    except Exception as e:
+        print("NTP Error:", e)
+        return False

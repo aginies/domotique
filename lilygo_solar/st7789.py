@@ -40,13 +40,25 @@ class ST7789(framebuf.FrameBuffer):
         time.sleep_ms(255)
         self._write(0x3A, b'\x55') # 16-bit color
         
-        # 0x70 = Landscape for T-Display
-        self._write(0x36, b'\x70') 
+        # 0x78 = Landscape for T-Display (BGR mode)
+        self._write(0x36, b'\x78') 
         
         self._write(0x21) # Display inversion on
         self._write(0x13) # Normal display mode on
         self._write(0x29) # Main screen turn on
         if self.backlight: self.backlight.value(1)
+
+    def set_rotation(self, rotation):
+        """ 0: Landscape, 1: Landscape Flipped """
+        if rotation == 0:
+            self._write(0x36, b'\x78') # BGR
+            self.x_offset = 40
+            self.y_offset = 53
+        else:
+            self._write(0x36, b'\xB8') # BGR
+            self.x_offset = 40
+            self.y_offset = 52
+        self.show()
 
     def show(self):
         # Use dynamic offsets

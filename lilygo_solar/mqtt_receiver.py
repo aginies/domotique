@@ -16,6 +16,7 @@ _display = None
 # Global state for multi-screen
 # 0: Dashboard, 1: Power Graph, 2: Temp Graph
 screen_mode = 0 
+rotation = 0
 history_p = [] # Power: (grid, equip)
 history_t = [] # Temp: (esp, ssr)
 last_data = {} # Store last MQTT payload for manual redraw
@@ -80,8 +81,9 @@ def draw_dashboard(data):
     
     # 1. ENEDIS (Electricity symbol)
     g_color = st7789.RED if grid > 0 else st7789.GREEN
+    grid_str = f"{grid:+.0f}"
     draw_electricity_symbol(_display, 10, 5, st7789.WHITE)
-    draw_huge_text(_display, f"{grid:.0f}", 58, 5, g_color)
+    draw_huge_text(_display, grid_str, 58, 5, g_color)
     draw_huge_text(_display, "w", 170, 5, st7789.WHITE)
     
     # 2. REDIRECTION (Arrow symbol)

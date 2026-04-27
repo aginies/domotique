@@ -9,8 +9,8 @@ CPU_FREQ = 160
 
 # Wi-Fi Settings
 E_WIFI = True
-WIFI_SSID = "WIFISSID"
-WIFI_PASSWORD = "WIFIPASS"
+WIFI_SSID = ""
+WIFI_PASSWORD = ""
 
 # AP Settings
 AP_SSID = "W_LilygoSolar"
@@ -23,6 +23,9 @@ AP_IP = ('192.168.66.11', '255.255.255.0', '192.168.66.11', '192.168.66.11')
 MQTT_IP = "10.0.1.101"
 
 MQTT_PORT = 1883
-MQTT_USER = "USER"
-MQTT_PASSWORD = "PASS"
+MQTT_USER = ""
+MQTT_PASSWORD = ""
 MQTT_TOPIC_SUB = "GuiboSolar/status_json"
+
+# TZ Offset: 3600 for CET (Winter), 7200 for CEST (Summer)
+TZ_OFFSET = 3600

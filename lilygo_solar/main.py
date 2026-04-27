@@ -9,10 +9,11 @@ import config_var as c_v
 import st7789
 
 # Safe flags for main loop processing
-_btn_pressed = False
+_btn1_pressed = False
+_btn2_pressed = False
 
 def main():
-    global _btn_pressed
+    global _btn1_pressed, _btn2_pressed
     gc.collect()
     print("--- Lilygo T-Display Starting ---")
 
@@ -42,18 +43,20 @@ def main():
     last_press = 0
 
     def irq_btn1(pin):
-        global _btn_pressed
-        _btn_pressed = True
+        global _btn1_pressed
+        _btn1_pressed = True
 
     def irq_btn2(pin):
-        global _btn_pressed
-        _btn_pressed = True
+        global _btn2_pressed
+        _btn2_pressed = True
 
     btn1.irq(trigger=Pin.IRQ_FALLING, handler=irq_btn1)
     btn2.irq(trigger=Pin.IRQ_FALLING, handler=irq_btn2)
 
     # 3. Wifi
     ip = wifi.connect()
+    if ip:
+        wifi.ntp_sync()
     
     # 4. MQTT
     mqtt_receiver.start(display)
@@ -61,6 +64,7 @@ def main():
     print("System Running Safely.")
     wdt = machine.WDT(timeout=60000)
     flush_counter = 0
+    ntp_counter = 0
     
     while True:
         wdt.feed()
@@ -72,12 +76,24 @@ def main():
             d_u.flush_logs()
             flush_counter = 0
 
+        # Periodic NTP sync (every 1 hour)
+        ntp_counter += 1
+        if ntp_counter >= 72000:
+            wifi.ntp_sync()
+            ntp_counter = 0
+
         # Process button clicks safely outside of IRQ
-        if _btn_pressed:
+        if _btn1_pressed or _btn2_pressed:
             now = utime.ticks_ms()
             if utime.ticks_diff(now, last_press) > 300:
-                mqtt_receiver.screen_mode = (mqtt_receiver.screen_mode + 1) % 3
-                print("Mode Cycle:", mqtt_receiver.screen_mode)
+                if _btn1_pressed:
+                    mqtt_receiver.screen_mode = (mqtt_receiver.screen_mode + 1) % 3
+                    print("Mode Cycle:", mqtt_receiver.screen_mode)
+                elif _btn2_pressed:
+                    mqtt_receiver.rotation = 1 - mqtt_receiver.rotation
+                    print("Rotation Toggle:", mqtt_receiver.rotation)
+                    if display:
+                        display.set_rotation(mqtt_receiver.rotation)
                 
                 # Redraw
                 if mqtt_receiver.last_data:
@@ -86,7 +102,8 @@ def main():
                     elif mqtt_receiver.screen_mode == 2: mqtt_receiver.draw_graph(2)
                 
                 last_press = now
-            _btn_pressed = False # Reset flag
+            _btn1_pressed = False # Reset flags
+            _btn2_pressed = False
 
         utime.sleep_ms(50) # Fast poll, very low CPU usage
 

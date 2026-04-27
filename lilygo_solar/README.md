@@ -12,15 +12,18 @@ A dedicated remote dashboard for the Solar Power Diverter, designed specifically
     - **Top Button**: Cycle through the three screen modes.
     - **Bottom Button**: Redundant screen cycle (or custom action).
 - **Intelligent Visuals**:
+    - NTP-synchronized real-time clock with configurable timezone.
     - Dynamic Y-axis scaling for maximum graph detail.
     - Color-coded power values (Green = Surplus, Red = Consumption).
 - **Lightweight Core**: Standalone implementation with zero external dependencies, optimized for low RAM usage.
 
 ## Installation
 
-1.  Copy `config_var.py.bck` to `config_var.py` and update your Wi-Fi/MQTT settings.
+1.  Copy `config_var.py.bck` to `config_var.py` and update your Wi-Fi/MQTT settings (and `TZ_OFFSET` if needed).
 2.  Deploy using the Makefile: `make upload`.
-3.  The board will automatically subscribe to your Solar Diverter's MQTT feed and display the data.
+3.  The board will automatically sync time via NTP, subscribe to your Solar Diverter's MQTT feed and display the data.
 
 ## Hardware Support
 Designed for the **LILYGO T-Display (V1.1)** with the 135x240 ST7789 IPS screen. Uses GPIO 35 and 0 for navigation.
+- **Top Button (GPIO 35)**: Cycle through the three screen modes.
+- **Bottom Button (GPIO 0)**: Flip screen 180 degrees.
