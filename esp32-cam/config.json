@@ -1,0 +1,12 @@
+{
+  "resolution": 10,
+  "rotation": 0,
+  "flip": false,
+  "mirror": false,
+  "flash_enabled": false,
+  "motion_enabled": true,
+  "motion_threshold": 20,
+  "hostname": "esp32-cam",
+  "wifi_ssid": "guibohome",
+  "wifi_pass": "ploplesmoules"
+}
