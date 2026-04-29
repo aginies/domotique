@@ -17,9 +17,13 @@ A dedicated remote dashboard for the Solar Power Diverter, designed specifically
     - Color-coded power values (Green = Surplus, Red = Consumption).
 - **Lightweight Core**: Standalone implementation with zero external dependencies, optimized for low RAM usage.
 
-## Installation
+## Configuration
 
-1.  Copy `config_var.py.bck` to `config_var.py` and update your Wi-Fi/MQTT settings (and `TZ_OFFSET` if needed).
+`config_var.py` is in `.gitignore` to prevent credentials from being committed. The `.bck` file contains sample data for reference.
+
+1.  Copy `config_var.py.bck` to `config_var.py` 
+2.  Update your Wi-Fi credentials (see `WIFI_SSID`, `WIFI_PASSWORD`) and MQTT settings (see `MQTT_USER`, `MQTT_PASSWORD`)
+3.  Set `TZ_OFFSET` to 3600 for CET or 7200 for CEST
 2.  Deploy using the Makefile: `make upload`.
 3.  The board will automatically sync time via NTP, subscribe to your Solar Diverter's MQTT feed and display the data.
 
