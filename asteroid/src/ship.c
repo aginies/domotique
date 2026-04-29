@@ -52,6 +52,15 @@ void ship_update(Game *game, float dt) {
         if (s->shield_timer > SHIELD_DURATION) {
             s->shield_timer = 0.0f;
             s->shield_activated = false;
+            s->alive = false;
+            s->shield_timer = 0.0f;
+            s->lives--;
+            s->invul_timer = INVUL_TIME;
+            particle_spawn(game, s->pos, 40, 80.0f, color_white());
+            if (s->lives <= 0) {
+                game->state = GSTATE_GAME_OVER;
+                game->game_over_timer = 5.0f;
+            }
         }
     }
     
@@ -133,11 +142,13 @@ void ship_draw(SDL_Renderer *ren, Ship *ship) {
     float rx = ship->pos.x - back_x - perp_x * r * 0.5f;
     float ry = ship->pos.y - back_y - perp_y * r * 0.5f;
     
-    /* Draw triangle: nose -> right -> left -> nose */
-    SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-    SDL_RenderLine(ren, nx, ny, rx, ry);
-    SDL_RenderLine(ren, rx, ry, lx, ly);
-    SDL_RenderLine(ren, lx, ly, nx, ny);
+    /* Draw filled triangle so it looks clean at any rotation */
+    SDL_Vertex verts[3] = {
+        {{nx, ny}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+        {{lx, ly}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+        {{rx, ry}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+    };
+    SDL_RenderGeometry(ren, NULL, verts, 3, NULL, 0);
     
     /* Shield circle (rendered as line polygon) */
     if (ship->shield_activated) {

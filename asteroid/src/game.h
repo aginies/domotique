@@ -111,6 +111,22 @@ typedef enum {
     KEY_COUNT
 } GameKey;
 
+typedef enum {
+    SFX_THRUST = 0,
+    SFX_SHOOT,
+    SFX_EXPLOSION_LARGE,
+    SFX_EXPLOSION_MEDIUM,
+    SFX_EXPLOSION_SMALL,
+    SFX_SAUCER,
+    SFX_SHIELD_ON,
+    SFX_SHIELD_OFF,
+    SFX_HYPERSPACE,
+    SFX_EXPLOSION_SHIELD,
+    SFX_LIFE_LOSE,
+    SFX_GAME_OVER,
+    SFX_COUNT
+} SoundEffect;
+
 /* Ship */
 typedef struct {
     vec2 pos;

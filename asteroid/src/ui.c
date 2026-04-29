@@ -45,7 +45,7 @@ void font_draw_char(SDL_Renderer *ren, int x, int y, int ch_idx, int scale, colo
     for (int row = 0; row < 7; row++) {
         uint8_t bits = glyph[row];
         for (int col = 0; col < 5; col++) {
-            if (bits & (0x10 >> col)) {
+            if (bits & (0x20 >> col)) {
                 int px = x + col * scale;
                 int py = y + row * scale;
                 SDL_SetRenderDrawColor(ren, c.r, c.g, c.b, c.a);
@@ -68,12 +68,19 @@ void font_draw(SDL_Renderer *ren, int x, int y, const char *text, int scale, col
 
 void ui_draw_score(SDL_Renderer *ren, Game *game);
 
+static void draw_text_box(SDL_Renderer *ren, int x, int y, int w, int h) {
+    SDL_SetRenderDrawColor(ren, 0, 0, 0, 180);
+    SDL_RenderFillRect(ren, &(SDL_FRect){(float)(x - 6), (float)(y - 6), (float)(w + 12), (float)(h + 12)});
+}
+
 void ui_draw_score_impl(SDL_Renderer *ren, int score, int x, int y) {
     char buf[16];
     SDL_snprintf(buf, sizeof(buf), "%d", score);
     int tw = 0;
-    for (const char *p = buf; *p; p++) tw += 6 * 8;
-    font_draw(ren, x - tw, y, buf, 8, color_white());
+    for (const char *p = buf; *p; p++) tw += 6 * 12;
+    int th = 12 * 7;
+    draw_text_box(ren, x - tw, y, tw, th);
+    font_draw(ren, x - tw, y, buf, 12, color_white());
 }
 
 void ui_draw_score(SDL_Renderer *ren, Game *game) {
@@ -88,34 +95,48 @@ void ui_draw(SDL_Renderer *ren, Game *game) {
     if (game->state == GSTATE_PLAYING) {
         ui_draw_score(ren, game);
         
-        /* Lives display - top left */
-        font_draw(ren, 10, 10, "LIVES", 8, color_white());
+        /* Lives display - top left with background */
+        int tw = font_text_width("LIVES", 12);
+        int th = 12 * 7;
+        draw_text_box(ren, 16, 16, tw + 12 + game->ship.lives * 36, th);
+        font_draw(ren, 22, 22, "LIVES", 12, color_white());
         for (int i = 0; i < game->ship.lives; i++) {
-            int ix = 10 + i * 32;
+            int ix = 22 + tw + 12 + i * 36;
             SDL_FRect tris[4];
-            tris[0] = (SDL_FRect){(float)ix + 12, (float)54, 6, 6};
-            tris[1] = (SDL_FRect){(float)ix, (float)72, 6, 4};
-            tris[2] = (SDL_FRect){(float)ix + 18, (float)72, 6, 4};
-            tris[3] = (SDL_FRect){(float)ix + 6, (float)78, 12, 4};
+            tris[0] = (SDL_FRect){(float)ix + 14, (float)60,  8, 8};
+            tris[1] = (SDL_FRect){(float)ix,       (float)86,  8, 5};
+            tris[2] = (SDL_FRect){(float)ix + 22,  (float)86,  8, 5};
+            tris[3] = (SDL_FRect){(float)ix + 8,   (float)98,  16, 5};
             SDL_SetRenderDrawColor(ren, 255, 255, 255, 200);
             for (int t = 0; t < 4; t++)
                 SDL_RenderFillRect(ren, &tris[t]);
         }
     }
     else if (game->state == GSTATE_TITLE) {
-        int title_w = font_text_width("ASTEROIDS", 12);
-        font_draw(ren, W/2 - title_w/2, H/2 - 60, "ASTEROIDS", 12, color_white());
+        int title_w = font_text_width("ASTEROIDS", 20);
+        int title_h = 20 * 7;
+        draw_text_box(ren, W/2 - title_w/2, H/2 - 70, title_w, title_h);
+        font_draw(ren, W/2 - title_w/2, H/2 - 70, "ASTEROIDS", 20, color_white());
         
-        char press_txt[32] = "PRESS ANY KEY TO START";
+        char press_txt[] = "PRESS ANY KEY TO START";
+        int pw = font_text_width(press_txt, 14);
+        int ph = 14 * 7;
+        draw_text_box(ren, W/2 - pw/2, H/2 + 30, pw, ph);
         int blink = ((int)(SDL_GetTicks() / 500) % 2);
         if (blink) {
-            font_draw(ren, W/2 - title_w/2, H/2 + 20, press_txt, 8, color_white());
+            font_draw(ren, W/2 - pw/2, H/2 + 30, press_txt, 14, color_white());
         }
     }
     else if (game->state == GSTATE_GAME_OVER) {
-        int score_w = font_text_width("GAME OVER", 12);
-        font_draw(ren, W/2 - score_w/2, H/2 - 40, "GAME OVER", 12, color_white());
-        font_draw(ren, W/2 - score_w/2, H/2 + 20, "PRESS ENTER TO RESTART", 8, color_white());
+        int score_w = font_text_width("GAME OVER", 20);
+        int score_h = 20 * 7;
+        draw_text_box(ren, W/2 - score_w/2, H/2 - 50, score_w, score_h);
+        font_draw(ren, W/2 - score_w/2, H/2 - 50, "GAME OVER", 20, color_red());
+        
+        int txt_w = font_text_width("PRESS ENTER TO RESTART", 14);
+        int txt_h = 14 * 7;
+        draw_text_box(ren, W/2 - txt_w/2, H/2 + 30, txt_w, txt_h);
+        font_draw(ren, W/2 - txt_w/2, H/2 + 30, "PRESS ENTER TO RESTART", 14, color_white());
     }
 }
 
