@@ -2,6 +2,8 @@
 
 A classic Asteroids game built in C using SDL3.
 
+This project was generated using the Qwen3.6 LLM.
+
 ## Build
 
 ```bash
@@ -57,6 +59,3 @@ The project is structured into modular source files, each responsible for a game
 - **Renderer fallback:** Attempts the SDL3 "gpu" renderer first, falls back to "opengl" for compatibility.
 - **Level scaling:** Saucer spawn rate decreases as levels progress, but is clamped to prevent overwhelming the player.
 
-### Acknowledgements
-
-This project was generated using the Qwen3.6 LLM.
