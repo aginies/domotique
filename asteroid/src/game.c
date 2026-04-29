@@ -49,6 +49,7 @@ void game_update(Game *game, float dt) {
                 game->state = GSTATE_PLAYING;
                 ship_init(game);
                 ast_spawn_level(game, 0);
+                sound_play(SFX_SHIELD_ON); sound_stop(SFX_THRUST);
                 game_clear_shots(game);
                 game_clear_particles(game);
                 game->saucer_timer = 0;
@@ -108,6 +109,7 @@ void game_update(Game *game, float dt) {
             if (game->level_trans_timer <= 0 && !game->level_trans_did_spawn) {
                 game->level_trans_did_spawn = true;
                 game->level++;
+                sound_play(SFX_SHOOT);
                 ast_spawn_level(game, game->level);
                 game->state = GSTATE_PLAYING;
                 ship_init(game);
@@ -116,6 +118,9 @@ void game_update(Game *game, float dt) {
             break;
             
         case GSTATE_GAME_OVER:
+            if (game->game_over_timer == 5.0f) {
+                sound_play(SFX_GAME_OVER);
+            }
             game->game_over_timer -= dt;
             if (game->game_over_timer <= 0) {
                 if (game->keys[KEY_ENTER]) {

@@ -5,7 +5,7 @@ CFLAGS = -Wall -Wextra -std=c17 -O2 -Isrc
 LDFLAGS = $(shell pkg-config --libs sdl3 2>/dev/null || pkg-config --libs sdl3-image 2>/dev/null) -lm
 
 TARGET = asteroid
-SRCS = src/main.c src/game.c src/ship.c src/asteroids.c src/saucers.c src/shots.c src/particles.c src/ui.c
+SRCS = src/main.c src/game.c src/ship.c src/asteroids.c src/saucers.c src/shots.c src/particles.c src/ui.c src/sound.c
 OBJS = $(SRCS:.c=.o)
 
 .PHONY: all clean run

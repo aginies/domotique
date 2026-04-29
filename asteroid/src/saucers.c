@@ -40,6 +40,7 @@ void saucer_init(Game *game, SaucerType type) {
     int score_groups = game->ship.score / SAUCER_POINTS_STEP;
     sc->points_value = SAUCER_POINTS_BASE + score_groups * 100;
     if (sc->points_value > 300) sc->points_value = 300;
+    sound_play(SFX_SAUCER);
 }
 
 void saucer_update(Game *game, float dt) {
@@ -53,8 +54,8 @@ void saucer_update(Game *game, float dt) {
         sc->enter_timer += dt;
         
         /* Off screen */
-        if (sc->dir == 1 && sc->pos.x > W + SIZE_LARGE * 2.0f) sc->alive = false;
-        if (sc->dir == -1 && sc->pos.x < -SIZE_LARGE * 2.0f) sc->alive = false;
+        if (sc->dir == 1 && sc->pos.x > W + SIZE_LARGE * 2.0f) { sc->alive = false; sound_stop(SFX_SAUCER); }
+        if (sc->dir == -1 && sc->pos.x < -SIZE_LARGE * 2.0f) { sc->alive = false; sound_stop(SFX_SAUCER); }
         
         /* Shooting */
         sc->shoot_timer -= dt;

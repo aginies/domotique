@@ -36,7 +36,11 @@ void ship_update(Game *game, float dt) {
         s->vel.x += sinf(s->angle) * SHIP_THRUST * dt;
         s->vel.y -= cosf(s->angle) * SHIP_THRUST * dt;
         s->thrusting = true;
+        if (!game->thrust_held) sound_play(SFX_THRUST);
+    } else if (game->thrust_held) {
+        sound_stop(SFX_THRUST);
     }
+    game->thrust_held = game->keys[KEY_UP];
     
     /* Clamp speed */
     float speed = sqrtf(s->vel.x * s->vel.x + s->vel.y * s->vel.y);
@@ -47,10 +51,16 @@ void ship_update(Game *game, float dt) {
     
     /* Shield */
     s->shield_activated = game->keys[KEY_DOWN];
+    if (s->shield_activated && !game->shield_was_pressed) {
+        sound_play(SFX_SHIELD_ON);
+    }
+    if (!s->shield_activated) {
+        sound_stop(SFX_SHIELD_ON);
+    }
+    game->shield_was_pressed = s->shield_activated;
     if (s->shield_activated) {
         s->shield_timer += dt;
-        if (s->shield_timer > SHIELD_DURATION) {
-            s->shield_timer = 0.0f;
+        if (s->shield_timer >= SHIELD_DURATION) {
             s->shield_activated = false;
             s->alive = false;
             s->shield_timer = 0.0f;
@@ -61,13 +71,17 @@ void ship_update(Game *game, float dt) {
                 game->state = GSTATE_GAME_OVER;
                 game->game_over_timer = 5.0f;
             }
+            return;
         }
+    } else {
+        s->shield_timer = 0.0f;
     }
     
     /* Shooting */
     s->shoot_timer -= dt;
     if (game->keys[KEY_SHOOT] && s->alive && s->shoot_timer <= 0) {
         shot_init_player(game, s->angle);
+        sound_play(SFX_SHOOT);
         s->shoot_timer = COOLDOWN;
     }
     
@@ -186,6 +200,7 @@ void ship_hyperspace(Game *game) {
     Ship *s = &game->ship;
     if (!s->alive) return;
     
+    sound_play(SFX_HYPERSPACE);
     /* 15% chance of death */
     Sint32 roll = SDL_rand(100);
     if (roll < (Sint32)(HYPERSPACE_CHANCE - 1)) {

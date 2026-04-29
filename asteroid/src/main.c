@@ -1,8 +1,9 @@
 #include "game.h"
+#include "sound.h"
 #include <stdlib.h>
 
 int main(void) {
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         SDL_Log("Could not initialize SDL: %s", SDL_GetError());
         SDL_Quit();
         return 1;
@@ -28,6 +29,8 @@ int main(void) {
     
     SDL_ShowWindow(win);
     
+    sound_init();
+    
     Game game;
     memset(&game, 0, sizeof(Game));
     game_init(&game);
@@ -52,6 +55,7 @@ int main(void) {
         SDL_RenderPresent(ren);
     }
     
+    sound_shutdown();
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();

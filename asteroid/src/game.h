@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "sound.h"
 
 /* Screen dimensions */
 #define W  1024
@@ -111,22 +112,6 @@ typedef enum {
     KEY_COUNT
 } GameKey;
 
-typedef enum {
-    SFX_THRUST = 0,
-    SFX_SHOOT,
-    SFX_EXPLOSION_LARGE,
-    SFX_EXPLOSION_MEDIUM,
-    SFX_EXPLOSION_SMALL,
-    SFX_SAUCER,
-    SFX_SHIELD_ON,
-    SFX_SHIELD_OFF,
-    SFX_HYPERSPACE,
-    SFX_EXPLOSION_SHIELD,
-    SFX_LIFE_LOSE,
-    SFX_GAME_OVER,
-    SFX_COUNT
-} SoundEffect;
-
 /* Ship */
 typedef struct {
     vec2 pos;
@@ -219,6 +204,8 @@ typedef struct Game {
     Uint32 last_time;
     bool level_trans_did_spawn;
     bool hyper_triggered;
+    bool thrust_held;
+    bool shield_was_pressed;
 } Game;
 
 /* Ship functions */

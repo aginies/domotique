@@ -147,6 +147,15 @@ void ast_split(Asteroid *a, int idx, Game *game) {
     game->ship.score += a->points;
     if (game->ship.score > game->high_score) game->high_score = game->ship.score;
     
+    /* Explosion sound */
+    if (a->size == AST_SIZE_LARGE) {
+        sound_play(SFX_EXPLOSION_LARGE);
+    } else if (a->size == AST_SIZE_MEDIUM) {
+        sound_play(SFX_EXPLOSION_MEDIUM);
+    } else {
+        sound_play(SFX_EXPLOSION_SMALL);
+    }
+    
     /* Explosion particles */
     particle_spawn(game, a->pos, EXPLOSION_PARTICLES, 60.0f, color_white());
     particle_spawn(game, a->pos, EXPLOSION_PARTICLES / 2, 30.0f, color_gray());
@@ -240,6 +249,7 @@ void ast_collisions(Game *game) {
                 game->ship.lives--;
                 game->ship.invul_timer = INVUL_TIME;
                 particle_spawn(game, game->ship.pos, 40, 80.0f, color_white());
+                sound_play(SFX_LIFE_LOSE);
                 
                 if (game->ship.lives <= 0) {
                     game->state = GSTATE_GAME_OVER;
@@ -263,6 +273,7 @@ void ast_collisions(Game *game) {
                 game->ship.invul_timer = INVUL_TIME;
                 ast_split(a, ai, game);
                 particle_spawn(game, game->ship.pos, 50, 90.0f, color_white());
+                sound_play(SFX_LIFE_LOSE);
                 
                 if (game->ship.lives <= 0) {
                     game->state = GSTATE_GAME_OVER;
@@ -288,6 +299,7 @@ void ast_collisions(Game *game) {
                     if (game->ship.score > game->high_score) game->high_score = game->ship.score;
                     particle_spawn(game, sc->pos, 30, 70.0f, color_white());
                     particle_spawn(game, game->ship.pos, 40, 80.0f, color_white());
+                    sound_play(SFX_LIFE_LOSE);
                     
                     if (game->ship.lives <= 0) {
                         game->state = GSTATE_GAME_OVER;
