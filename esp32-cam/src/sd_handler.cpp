@@ -50,9 +50,15 @@ String readFile(fs::FS &fs, const char * path){
         Serial.println("Failed to open file for reading");
         return String();
     }
-    String fileContent = "";
-    while(file.available()){
-        fileContent += (char)file.read();
+    size_t fileSize = file.size();
+    String fileContent;
+    if (fileSize > 0) {
+        fileContent.reserve(fileSize);
+    }
+    char buf[128];
+    int len;
+    while ((len = file.read((uint8_t *)buf, sizeof(buf))) > 0) {
+        fileContent += String(buf, len);
     }
     file.close();
     return fileContent;

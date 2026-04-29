@@ -4,5 +4,6 @@
 #include "esp_http_server.h"
 
 void startWebServer();
+void webSocketLoop();
 
 #endif

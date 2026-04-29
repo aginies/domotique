@@ -3,6 +3,7 @@
 #include "camera_handler.h"
 #include "config_handler.h"
 #include "sd_handler.h"
+#include <WebSocketsServer.h>
 #include <time.h>
 #include "Arduino.h"
 
@@ -11,59 +12,228 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
+// HTTP server
 httpd_handle_t camera_httpd = NULL;
+
+// WebSocket server
+#define WEBSOCKET_PORT 81
+WebSocketsServer webSocket(WEBSOCKET_PORT);
+
+// Forward declarations
+static esp_err_t index_handler(httpd_req_t *req);
+
+static void getResName(int res, char *buf, size_t len) {
+    switch(res) {
+        case 10: snprintf(buf, len, "UXGA"); break;
+        case 9:  snprintf(buf, len, "SXGA"); break;
+        case 8:  snprintf(buf, len, "XGA"); break;
+        case 7:  snprintf(buf, len, "SVGA"); break;
+        case 6:  snprintf(buf, len, "VGA"); break;
+        case 5:  snprintf(buf, len, "CIF"); break;
+        case 4:  snprintf(buf, len, "QVGA"); break;
+        default:  snprintf(buf, len, "Unknown"); break;
+    }
+}
+
+void webSocketLoop() {
+    webSocket.loop();
+}
+
+void broadcastConfig() {
+    if (!camera_httpd) return;
+
+    char buf[256];
+    char resName[16];
+    getResName(globalConfig.resolution, resName, sizeof(resName));
+
+    snprintf(buf, sizeof(buf),
+        "{\"resolution\":%d,\"rotation\":%d,\"flip\":%d,\"mirror\":%d,\"flash\":%d,\"motion\":%d,\"threshold\":%d,\"resName\":\"%s\"}",
+        globalConfig.resolution, globalConfig.rotation,
+        globalConfig.flip ? 1 : 0,
+        globalConfig.mirror ? 1 : 0,
+        globalConfig.flash_enabled ? 1 : 0,
+        globalConfig.motion_enabled ? 1 : 0,
+        globalConfig.motion_threshold,
+        resName
+    );
+
+    webSocket.broadcastTXT(buf, strlen(buf));
+}
+
+static void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    switch (type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[WS] Client %d disconnected\n", num);
+            break;
+
+        case WStype_CONNECTED: {
+            Serial.printf("[WS] Client %d connected\n", num);
+            broadcastConfig();
+            break;
+        }
+
+        case WStype_TEXT: {
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, payload);
+
+            if (err) {
+                Serial.printf("[WS] JSON parse failed: %s\n", err.c_str());
+                break;
+            }
+
+            const char *cmd = doc["cmd"];
+            if (!cmd) break;
+
+            bool changed = false;
+
+            if (strcmp(cmd, "resolution") == 0) {
+                int val = doc["val"] | globalConfig.resolution;
+                globalConfig.resolution = constrain(val, 0, 15);
+                changed = true;
+                Serial.printf("[WS] Resolution -> %d\n", globalConfig.resolution);
+            }
+            else if (strcmp(cmd, "flip") == 0) {
+                if (doc["toggle"] | false) {
+                    globalConfig.flip = !globalConfig.flip;
+                } else {
+                    globalConfig.flip = doc["val"] | globalConfig.flip;
+                }
+                changed = true;
+                Serial.printf("[WS] Flip -> %d\n", globalConfig.flip);
+            }
+            else if (strcmp(cmd, "mirror") == 0) {
+                if (doc["toggle"] | false) {
+                    globalConfig.mirror = !globalConfig.mirror;
+                } else {
+                    globalConfig.mirror = doc["val"] | globalConfig.mirror;
+                }
+                changed = true;
+                Serial.printf("[WS] Mirror -> %d\n", globalConfig.mirror);
+            }
+            else if (strcmp(cmd, "flash") == 0) {
+                bool newState;
+                if (doc["toggle"] | false) {
+                    newState = !globalConfig.flash_enabled;
+                } else {
+                    newState = doc["val"] | globalConfig.flash_enabled;
+                }
+                setFlash(newState);
+                globalConfig.flash_enabled = newState;
+                changed = true;
+                Serial.printf("[WS] Flash -> %d\n", newState);
+            }
+            else if (strcmp(cmd, "motion") == 0) {
+                if (doc["toggle"] | false) {
+                    globalConfig.motion_enabled = !globalConfig.motion_enabled;
+                } else {
+                    globalConfig.motion_enabled = doc["val"] | globalConfig.motion_enabled;
+                }
+                changed = true;
+                Serial.printf("[WS] Motion -> %d\n", globalConfig.motion_enabled);
+            }
+            else if (strcmp(cmd, "threshold") == 0) {
+                int val = doc["val"] | globalConfig.motion_threshold;
+                globalConfig.motion_threshold = constrain(val, 1, 50);
+                changed = true;
+                Serial.printf("[WS] Threshold -> %d\n", globalConfig.motion_threshold);
+            }
+            else if (strcmp(cmd, "ping") == 0) {
+                webSocket.sendTXT(num, "{\"type\":\"pong\"}");
+                break;
+            }
+
+            if (changed) {
+                updateCameraSettings();
+                saveConfig();
+                broadcastConfig();
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+}
 
 static esp_err_t index_handler(httpd_req_t *req){
     httpd_resp_set_type(req, "text/html");
-    String html = "<html><head><title>ESP32-CAM</title><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += "<style>body{font-family:Arial;text-align:center;} .btn{padding:10px;margin:5px;cursor:pointer;background:#eee;border:1px solid #ccc;border-radius:4px;min-width:120px;}</style></head><body>";
-    html += "<h1>ESP32-CAM Control</h1>";
-    
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
+    httpd_resp_set_hdr(req, "Pragma", "no-cache");
+    String html = "<!DOCTYPE html><html><head><title>ESP32-CAM</title><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='cache-control' content='no-cache'><meta http-equiv='expires' content='0'><meta http-equiv='pragma' content='no-cache'>";
+    html += "<style>body{font-family:Arial;text-align:center;margin:10px;background:#1a1a2e;color:#eee}.btn{padding:8px 16px;margin:4px;cursor:pointer;background:#e94560;border:none;border-radius:4px;color:#fff;font-size:14px;min-width:100px}.btn:hover{background:#c73e54}.btn.active{background:#0f3460}.btn-toggle{background:#533483}.btn-toggle.active{background:#e94560}.status{margin:6px;font-size:13px;color:#aaa}</style></head><body>";
+    html += "<h1>ESP32-CAM</h1>";
+
     if (!cameraOK) {
-        html += "<h2 style='color:red;'>CAMERA HARDWARE ERROR (Check Ribbon)</h2>";
+        html += "<h2 style='color:#e94560'>CAMERA ERROR</h2>";
     }
 
-    html += "<img id='stream' src='/stream' style='width:100%; max-width:640px; border:1px solid #000;'><br><br>";
-    html += "<div>";
-    html += "Resolution: <select id='resSelect' onchange=\"fetch('/control?var=resolution&val='+this.value).then(() => setTimeout(() => location.reload(), 500))\">";
-    
-    int resValues[] = {10, 9, 8, 7, 6, 5, 4};
-    const char* resNames[] = {"UXGA (1600x1200)", "SXGA (1280x1024)", "XGA (1024x768)", "SVGA (800x600)", "VGA (640x480)", "CIF (400x296)", "QVGA (320x240)"};
-    
-    for (int i = 0; i < 7; i++) {
-        html += "<option value='";
-        html += String(resValues[i]);
-        html += "'";
-        if (globalConfig.resolution == resValues[i]) html += " selected";
-        html += ">";
-        html += resNames[i];
-        html += "</option>";
-    }
-    html += "</select><br><br>";
-    
-    html += "<button class='btn' onclick=\"fetch('/control?var=flip&val=toggle').then(() => location.reload())\">Toggle Flip</button>";
-    html += "<button class='btn' onclick=\"fetch('/control?var=mirror&val=toggle').then(() => location.reload())\">Toggle Mirror</button><br>";
-    html += "<button class='btn' onclick=\"fetch('/control?var=flash&val=toggle')\">Toggle Flash</button>";
-    html += "<button class='btn' onclick=\"fetch('/control?var=motion&val=toggle').then(() => location.reload())\">Motion: ";
-    html += globalConfig.motion_enabled ? "ON" : "OFF";
-    html += "</button><br>";
-    html += "Motion Sensitivity: <input type='range' min='1' max='50' value='";
-    html += String(globalConfig.motion_threshold);
-    html += "' onchange=\"fetch('/control?var=threshold&val='+this.value)\"><br>";
-    html += "<button class='btn' onclick=\"fetch('/capture').then(r => alert('Photo saved to SD Card'))\">Take Photo</button>";
+    html += "<img id='stream' src='/stream' style='width:100%;max-width:640px;border:2px solid #16213e;border-radius:8px;'><div class='status' id='wsStatus'>Connecting...</div><br>";
+    html += "<div style='margin:15px 0;'>";
+    html += "<button class='btn' onclick='setRes(10)'>UXGA</button>";
+    html += "<button class='btn' onclick='setRes(9)'>SXGA</button>";
+    html += "<button class='btn' onclick='setRes(8)'>XGA</button>";
+    html += "<button class='btn' onclick='setRes(7)'>SVGA</button>";
+    html += "<button class='btn' onclick='setRes(6)'>VGA</button>";
+    html += "<button class='btn' onclick='setRes(5)'>CIF</button>";
+    html += "<button class='btn' onclick='setRes(4)'>QVGA</button>";
+    html += "<br><br>";
+    html += "<button class='btn btn-toggle' id='flipBtn'>Flip</button>";
+    html += "<button class='btn btn-toggle' id='mirrorBtn'>Mirror</button><br>";
+    html += "<button class='btn btn-toggle' id='flashBtn'>Flash</button>";
+    html += "<button class='btn btn-toggle' id='motionBtn'>Motion</button><br>";
+    html += "Sensitivity: <input id='threshRange' type='range' min='1' max='50' value='15' style='width:200px;vertical-align:middle'>";
+    html += "<span id='threshVal' class='status'>15</span><br>";
+    html += "<button class='btn' onclick='doCapture()'>Take Photo</button>";
     html += "</div>";
-    html += "<div style='margin-top:20px; padding:10px; background:#f9f9f9; font-size: 0.9em;'>";
-    html += "<b>Direct Links:</b><br>";
-    html += "Live Stream: <a href='/stream' id='sl'></a><br>";
-    html += "Snapshot: <a href='/capture' id='cl'></a>";
+    html += "<div style='margin-top:10px;font-size:12px;color:#666'>";
+    html += "Stream: <a href='/stream' style='color:#e94560'>/stream</a> | ";
+    html += "Snap: <a href='/capture' style='color:#e94560'>/capture</a>";
     html += "</div>";
+
     html += "<script>";
-    html += "var url = window.location.origin;";
-    html += "document.getElementById('stream').src = url + '/stream';";
-    html += "document.getElementById('sl').href = url + '/stream';";
-    html += "document.getElementById('sl').innerText = url + '/stream';";
-    html += "document.getElementById('cl').href = url + '/capture';";
-    html += "document.getElementById('cl').innerText = url + '/capture';";
+    html += "var ws;";
+    html += "function logStatus(msg) { document.getElementById('wsStatus').innerText = msg; }";
+    html += "function updateUI(c) {";
+    html += "  updateBtn('flipBtn', c.flip);";
+    html += "  updateBtn('mirrorBtn', c.mirror);";
+    html += "  updateBtn('flashBtn', c.flash);";
+    html += "  updateBtn('motionBtn', c.motion);";
+    html += "  document.getElementById('threshRange').value = c.threshold;";
+    html += "  document.getElementById('threshVal').innerText = c.threshold;";
+    html += "}";
+    html += "function updateBtn(id, val) { var b=document.getElementById(id); b.classList.toggle('active',!!val); }";
+    html += "function sendWS(cmd, val) {";
+    html += "  var msg={cmd:cmd};";
+    html += "  if(val!==undefined&&typeof val==='object') { for(var k in val) msg[k]=val[k]; } else { msg.val=val; }";
+    html += "  if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg));";
+    html += "}";
+    html += "function setRes(v) { sendWS('resolution', v); }";
+    html += "function toggleFlip() { sendWS('flip', {toggle:true}); }";
+    html += "function toggleMirror() { sendWS('mirror', {toggle:true}); }";
+    html += "function toggleFlash() { sendWS('flash', {toggle:true}); }";
+    html += "function toggleMotion() { sendWS('motion', {toggle:true}); }";
+    html += "function doCapture() { fetch('/capture').then(()=>{}); }";
+    html += "function connectWS() {";
+    html += "  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';";
+    html += "  ws = new WebSocket(proto + '//' + location.host + ':' + " + String(WEBSOCKET_PORT) + ");";
+    html += "  ws.onopen = function(){ logStatus('Connected'); console.log('WS opened'); };";
+    html += "  ws.onclose = function(){ logStatus('Disconnected'); setTimeout(connectWS, 3000); };";
+    html += "  ws.onerror = function(){ logStatus('WS Error'); ws.close(); };";
+    html += "  ws.onmessage = function(e) {";
+    html += "    var c = JSON.parse(e.data);";
+    html += "    if(c.type === 'pong') { logStatus('Connected'); return; }";
+    html += "    updateConfig(c); console.log('WS recv:', c);";
+    html += "  };";
+    html += "}";
+    html += "function updateConfig(c) {";
+    html += "  updateUI(c);";
+    html += "}";
+    html += "document.getElementById('flipBtn').onclick=function(){toggleFlip();};";
+    html += "document.getElementById('mirrorBtn').onclick=function(){toggleMirror();};";
+    html += "document.getElementById('flashBtn').onclick=function(){toggleFlash();};";
+    html += "document.getElementById('motionBtn').onclick=function(){toggleMotion();};";
+    html += "document.getElementById('threshRange').oninput=function(){document.getElementById('threshVal').innerText=this.value;setTimeout(function(){sendWS('threshold',parseInt(document.getElementById('threshRange').value))},300);};";
+    html += "connectWS();";
     html += "</script></body></html>";
     return httpd_resp_send(req, html.c_str(), html.length());
 }
@@ -138,23 +308,30 @@ static esp_err_t capture_handler(httpd_req_t *req){
     httpd_resp_set_type(req, "image/jpeg");
     httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.jpg");
     res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
-    
-    // Save to SD Card
-    time_t now = time(nullptr);
-    struct tm timeinfo;
-    localtime_r(&now, &timeinfo);
-    char path[64];
-    strftime(path, sizeof(path), "/photo_%Y%m%d_%H%M%S.jpg", &timeinfo);
-    
-    File file = SD_MMC.open(path, FILE_WRITE);
-    if (file) {
-        file.write(fb->buf, fb->len);
-        file.close();
-        Serial.printf("Capture: Saved to %s\n", path);
+
+    if (SD_MMC.cardType() == CARD_NONE) {
+        Serial.println("Capture: No SD card available");
     } else {
-        Serial.println("Capture: Failed to save to SD card");
+        time_t now = time(nullptr);
+        struct tm timeinfo;
+        memset(&timeinfo, 0, sizeof(timeinfo));
+        localtime_r(&now, &timeinfo);
+        char path[64];
+        memset(path, 0, sizeof(path));
+        if (strftime(path, sizeof(path), "/photo_%Y%m%d_%H%M%S.jpg", &timeinfo) == 0) {
+            Serial.println("Capture: strftime failed");
+        } else {
+            File file = SD_MMC.open(path, FILE_WRITE);
+            if (file) {
+                file.write(fb->buf, fb->len);
+                file.close();
+                Serial.printf("Capture: Saved to %s\n", path);
+            } else {
+                Serial.println("Capture: Failed to save to SD card");
+            }
+        }
     }
-    
+
     esp_camera_fb_return(fb);
     Serial.printf("Capture: Sent %u bytes\n", fb->len);
     return res;
@@ -192,43 +369,55 @@ static esp_err_t control_handler(httpd_req_t *req){
     bool changed = false;
 
     if(!strcmp(var, "resolution")) {
-        globalConfig.resolution = val_int;
+        globalConfig.resolution = constrain(val_int, 0, 15);
         changed = true;
-        Serial.printf("Web Interface: Resolution changed to %d\n", val_int);
+        if (globalConfig.resolution != val_int) {
+            Serial.printf("Web Interface: Resolution clamped to %d (was %d)\n", globalConfig.resolution, val_int);
+        }
+        Serial.printf("Web Interface: Resolution changed to %d\n", globalConfig.resolution);
     } else if(!strcmp(var, "flip")) {
-        globalConfig.flip = (strcmp(val, "toggle") == 0) ? !globalConfig.flip : val_int;
+        globalConfig.flip = (strcmp(val, "toggle") == 0) ? !globalConfig.flip : (val_int ? true : false);
         changed = true;
         Serial.printf("Web Interface: Flip changed to %s\n", globalConfig.flip ? "ON" : "OFF");
     } else if(!strcmp(var, "mirror")) {
-        globalConfig.mirror = (strcmp(val, "toggle") == 0) ? !globalConfig.mirror : val_int;
+        globalConfig.mirror = (strcmp(val, "toggle") == 0) ? !globalConfig.mirror : (val_int ? true : false);
         changed = true;
         Serial.printf("Web Interface: Mirror changed to %s\n", globalConfig.mirror ? "ON" : "OFF");
     } else if(!strcmp(var, "flash")) {
-        bool newState = (strcmp(val, "toggle") == 0) ? !globalConfig.flash_enabled : val_int;
+        bool newState = (strcmp(val, "toggle") == 0) ? !globalConfig.flash_enabled : (val_int ? true : false);
         setFlash(newState);
+        globalConfig.flash_enabled = newState;
+        changed = true;
         Serial.printf("Web Interface: Flash changed to %s\n", newState ? "ON" : "OFF");
     } else if(!strcmp(var, "motion")) {
-        globalConfig.motion_enabled = (strcmp(val, "toggle") == 0) ? !globalConfig.motion_enabled : val_int;
+        globalConfig.motion_enabled = (strcmp(val, "toggle") == 0) ? !globalConfig.motion_enabled : (val_int ? true : false);
         changed = true;
         Serial.printf("Web Interface: Motion changed to %s\n", globalConfig.motion_enabled ? "ON" : "OFF");
     } else if(!strcmp(var, "threshold")) {
-        globalConfig.motion_threshold = val_int;
+        globalConfig.motion_threshold = constrain(val_int, 1, 50);
         changed = true;
-        Serial.printf("Web Interface: Motion Threshold changed to %d\n", val_int);
+        Serial.printf("Web Interface: Motion Threshold changed to %d\n", globalConfig.motion_threshold);
     }
 
     if (changed) {
         updateCameraSettings();
         saveConfig();
+        broadcastConfig();
     }
 
     return httpd_resp_send(req, NULL, 0);
 }
 
 void startWebServer(){
+    // ---- WebSocket server ----
+    webSocket.onEvent(webSocketEvent);
+    webSocket.begin();
+    Serial.printf("WebSocket server on port %d\n", WEBSOCKET_PORT);
+
+    // ---- HTTP server ----
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192; // Increase stack for camera operations
-    config.max_open_sockets = 5;
+    config.stack_size = 8192;
+    config.max_open_sockets = 6;
 
     httpd_uri_t index_uri = { .uri = "/", .method = HTTP_GET, .handler = index_handler, .user_ctx = NULL };
     httpd_uri_t stream_uri = { .uri = "/stream", .method = HTTP_GET, .handler = stream_handler, .user_ctx = NULL };

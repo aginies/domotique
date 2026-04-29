@@ -43,17 +43,7 @@ bool initCamera() {
     // Give hardware time to settle
     delay(500);
 
-    // SCCB Bus Recovery: Toggle SCL to clear hung bus
-    pinMode(SIOC_GPIO_NUM, OUTPUT);
-    digitalWrite(SIOC_GPIO_NUM, HIGH);
-    for(int i=0; i<10; i++) {
-        digitalWrite(SIOC_GPIO_NUM, LOW);
-        delay(10);
-        digitalWrite(SIOC_GPIO_NUM, HIGH);
-        delay(10);
-    }
-
-    // Camera init
+    // Camera init (ESP core handles SCCB bus recovery internally)
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
         Serial.printf("Camera init failed with error 0x%x", err);

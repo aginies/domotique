@@ -31,7 +31,8 @@ void setupNTP() {
 }
 
 void setup() {
-    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Disable brownout detector
+    // Brownout detector kept enabled (default ~2.65V threshold).
+    // Disabling caused silent crashes under heavy load (camera + WiFi + LED).
     Serial.begin(115200);
     delay(1000); // Wait for Serial to initialize
     Serial.println("\n\n====================================");
@@ -101,6 +102,7 @@ void setup() {
 }
 
 void loop() {
+    webSocketLoop();
     if (cameraOK && globalConfig.motion_enabled) {
         camera_fb_t * fb = esp_camera_fb_get();
         if (fb) {
@@ -110,11 +112,13 @@ void loop() {
                 // Save image to SD
                 time_t now = time(nullptr);
                 struct tm timeinfo;
+                memset(&timeinfo, 0, sizeof(timeinfo));
                 localtime_r(&now, &timeinfo);
                 char path[64];
-                strftime(path, sizeof(path), "/motion_%Y%m%d_%H%M%S.jpg", &timeinfo);
-                
-                if (SD_MMC.cardType() == CARD_NONE) {
+                memset(path, 0, sizeof(path));
+                if (strftime(path, sizeof(path), "/motion_%Y%m%d_%H%M%S.jpg", &timeinfo) == 0) {
+                    Serial.println("Motion: strftime failed");
+                } else if (SD_MMC.cardType() == CARD_NONE) {
                     Serial.println("Error: No SD Card detected, cannot save motion image.");
                 } else {
                     File file = SD_MMC.open(path, FILE_WRITE);
