@@ -34,7 +34,7 @@ int font_text_width(const char *text, int scale) {
     int total = 0;
     for (const char *p = text; *p; p++) {
         int ch = (unsigned char)*p;
-        if (ch >= 32 && ch <= 126) total += scale * (5 + 1);
+        if (ch >= 32 && ch <= 126) total += scale * (5 + 2);
     }
     return total;
 }
@@ -70,73 +70,113 @@ void ui_draw_score(SDL_Renderer *ren, Game *game);
 
 static void draw_text_box(SDL_Renderer *ren, int x, int y, int w, int h) {
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 180);
-    SDL_RenderFillRect(ren, &(SDL_FRect){(float)(x - 6), (float)(y - 6), (float)(w + 12), (float)(h + 12)});
+    SDL_RenderFillRect(ren, &(SDL_FRect){(float)(x - 8), (float)(y - 8), (float)(w + 16), (float)(h + 16)});
 }
 
-void ui_draw_score_impl(SDL_Renderer *ren, int score, int x, int y) {
+void ui_draw_score_impl(SDL_Renderer *ren, int score, int x, int y, int scale) {
     char buf[16];
     SDL_snprintf(buf, sizeof(buf), "%d", score);
-    int tw = 0;
-    for (const char *p = buf; *p; p++) tw += 6 * 12;
-    int th = 12 * 7;
+    int tw = font_text_width(buf, scale);
+    int th = scale * 7;
     draw_text_box(ren, x - tw, y, tw, th);
-    font_draw(ren, x - tw, y, buf, 12, color_white());
+    font_draw(ren, x - tw, y, buf, scale, color_white());
 }
 
 void ui_draw_score(SDL_Renderer *ren, Game *game) {
     if (!game->ship.alive) {
-        ui_draw_score_impl(ren, game->ship.score, W - 16, 10);
+        ui_draw_score_impl(ren, game->ship.score, W - 16, 10, 8);
     } else {
-        ui_draw_score_impl(ren, game->ship.score, W / 2, 10);
+        ui_draw_score_impl(ren, game->ship.score, W / 2, 10, 8);
     }
 }
 
 void ui_draw(SDL_Renderer *ren, Game *game) {
     if (game->state == GSTATE_PLAYING) {
-        ui_draw_score(ren, game);
-        
-        /* Lives display - top left with background */
-        int tw = font_text_width("LIVES", 12);
-        int th = 12 * 7;
-        draw_text_box(ren, 16, 16, tw + 12 + game->ship.lives * 36, th);
-        font_draw(ren, 22, 22, "LIVES", 12, color_white());
+        /* Lives as small ship icons on the far right */
+        int icon_scale = 3;
+        int ship_w = 6 * icon_scale;
+        int ship_h = 4 * icon_scale;
+        int lives_w = game->ship.lives * ship_w;
+        int lx = W - 16 - lives_w;
+        draw_text_box(ren, lx, 16, lives_w, ship_h);
         for (int i = 0; i < game->ship.lives; i++) {
-            int ix = 22 + tw + 12 + i * 36;
-            SDL_FRect tris[4];
-            tris[0] = (SDL_FRect){(float)ix + 14, (float)60,  8, 8};
-            tris[1] = (SDL_FRect){(float)ix,       (float)86,  8, 5};
-            tris[2] = (SDL_FRect){(float)ix + 22,  (float)86,  8, 5};
-            tris[3] = (SDL_FRect){(float)ix + 8,   (float)98,  16, 5};
-            SDL_SetRenderDrawColor(ren, 255, 255, 255, 200);
-            for (int t = 0; t < 4; t++)
-                SDL_RenderFillRect(ren, &tris[t]);
+            float sx = lx + i * ship_w + 3 * icon_scale;
+            float sy = 16 + ship_h / 2;
+            /* Draw a small triangle pointing up */
+            float nose_x = sx, nose_y = sy - 2 * icon_scale;
+            float l_x = sx - 3 * icon_scale, l_y = sy + icon_scale;
+            float r_x = sx + 3 * icon_scale, r_y = sy + icon_scale;
+            SDL_Vertex verts[3] = {
+                {{nose_x, nose_y}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+                {{l_x, l_y},       {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+                {{r_x, r_y},       {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
+            };
+            SDL_RenderGeometry(ren, NULL, verts, 3, NULL, 0);
         }
+        
+        /* Level + Score */
+        int lscale = 8;
+        /* Level number top-left */
+        int level_num = game->level + 1;
+        char level_str[8];
+        SDL_snprintf(level_str, sizeof(level_str), "%d", level_num);
+        int level_w = font_text_width(level_str, lscale);
+        draw_text_box(ren, 16, 16, level_w, lscale * 7);
+        font_draw(ren, 16, 16, level_str, lscale, color_gold());
+        
+        /* Score centered */
+        char score_str[16];
+        int score_scale = 10;
+        SDL_snprintf(score_str, sizeof(score_str), "%d", game->ship.score);
+        /* Pad score to always be 6 digits */
+        int pad = 6;
+        if (game->ship.score < pad) {
+            SDL_snprintf(score_str, sizeof(score_str), "%0*d", pad, game->ship.score);
+        }
+        int score_w = font_text_width(score_str, score_scale);
+        int score_h = score_scale * 7;
+        draw_text_box(ren, W / 2 - score_w / 2, 16, score_w, score_h);
+        font_draw(ren, W / 2 - score_w / 2, 16, score_str, score_scale, color_white());
+        
+        /* High score below */
+        char hi_str[16];
+        int hi_scale = 7;
+        int pad2 = 6;
+        SDL_snprintf(hi_str, sizeof(hi_str), "%0*d", pad2, game->high_score);
+        int hi_w = font_text_width(hi_str, hi_scale);
+        draw_text_box(ren, W / 2 - hi_w / 2, 40, hi_w, hi_scale * 7);
+        font_draw(ren, W / 2 - hi_w / 2, 40, hi_str, hi_scale, (color){100, 100, 100, 255});
     }
+    
     else if (game->state == GSTATE_TITLE) {
-        int title_w = font_text_width("ASTEROIDS", 20);
-        int title_h = 20 * 7;
+        int scale = 10;
+        int title_w = font_text_width("ASTEROIDS", scale);
+        int title_h = scale * 7;
         draw_text_box(ren, W/2 - title_w/2, H/2 - 70, title_w, title_h);
-        font_draw(ren, W/2 - title_w/2, H/2 - 70, "ASTEROIDS", 20, color_white());
+        font_draw(ren, W/2 - title_w/2, H/2 - 70, "ASTEROIDS", scale, color_white());
         
         char press_txt[] = "PRESS ANY KEY TO START";
-        int pw = font_text_width(press_txt, 14);
-        int ph = 14 * 7;
+        int subscale = 7;
+        int pw = font_text_width(press_txt, subscale);
+        int ph = subscale * 7;
         draw_text_box(ren, W/2 - pw/2, H/2 + 30, pw, ph);
         int blink = ((int)(SDL_GetTicks() / 500) % 2);
         if (blink) {
-            font_draw(ren, W/2 - pw/2, H/2 + 30, press_txt, 14, color_white());
+            font_draw(ren, W/2 - pw/2, H/2 + 30, press_txt, subscale, color_white());
         }
     }
     else if (game->state == GSTATE_GAME_OVER) {
-        int score_w = font_text_width("GAME OVER", 20);
-        int score_h = 20 * 7;
+        int scale = 14;
+        int score_w = font_text_width("GAME OVER", scale);
+        int score_h = scale * 7;
         draw_text_box(ren, W/2 - score_w/2, H/2 - 50, score_w, score_h);
-        font_draw(ren, W/2 - score_w/2, H/2 - 50, "GAME OVER", 20, color_red());
+        font_draw(ren, W/2 - score_w/2, H/2 - 50, "GAME OVER", scale, color_red());
         
-        int txt_w = font_text_width("PRESS ENTER TO RESTART", 14);
-        int txt_h = 14 * 7;
+        int subscale = 10;
+        int txt_w = font_text_width("PRESS ENTER TO RESTART", subscale);
+        int txt_h = subscale * 7;
         draw_text_box(ren, W/2 - txt_w/2, H/2 + 30, txt_w, txt_h);
-        font_draw(ren, W/2 - txt_w/2, H/2 + 30, "PRESS ENTER TO RESTART", 14, color_white());
+        font_draw(ren, W/2 - txt_w/2, H/2 + 30, "PRESS ENTER TO RESTART", subscale, color_white());
     }
 }
 
@@ -144,11 +184,11 @@ int ui_draw_number(SDL_Renderer *ren, int x, int y, int n, int scale, color c) {
     char buf[16];
     SDL_snprintf(buf, sizeof(buf), "%d", n);
     int w = 0;
-    for (const char *p = buf; *p; p++) w += 5 * scale;
+    for (const char *p = buf; *p; p++) w += 6 * scale;
     int cx = x - w;
     for (const char *p = buf; *p; p++) {
         font_draw_char(ren, cx, y, *p - '0' + 32, scale, c);
-        cx += 5 * scale;
+        cx += 6 * scale;
     }
     return w;
 }

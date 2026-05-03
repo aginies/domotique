@@ -88,7 +88,7 @@ void ast_spawn_level(Game *game, int level) {
     game->level_trans_did_spawn = false;
     
     int N = 4 + level;
-    if (N > 12) N = 12;
+    if (N > 14) N = 14;
     
     for (int i = 0; i < N && game->ast_count < MAX_ASTEROIDS; i++) {
         ast_init_random(game, level, game->ast_count);
@@ -170,6 +170,10 @@ void ast_split(Asteroid *a, int idx, Game *game) {
     float orig_angle = atan2f(a->vel.y, a->vel.x);
     float variance = (SDL_randf() - 0.5f) * (40.0f * ((float)M_PI / 180.0f));
     
+    int third_chance = 0;
+    if (a->size == AST_SIZE_LARGE && game->level >= 4) third_chance = (game->level - 3) * 10;
+    if (a->size == AST_SIZE_MEDIUM && game->level >= 6) third_chance = (game->level - 5) * 10;
+    
     for (int dir = -1; dir <= 1; dir += 2) {
         if (game->ast_count >= MAX_ASTEROIDS) break;
         
@@ -181,6 +185,28 @@ void ast_split(Asteroid *a, int idx, Game *game) {
         new_ast->radius = asteroid_radius_val(next_size);
         new_ast->pos = a->pos;
         new_ast->vel = (vec2){ cosf(new_angle) * spd, sinf(new_angle) * spd };
+        new_ast->angle = SDL_randf() * 2.0f * (float)M_PI;
+        new_ast->rot_speed = ASTEROID_ROT_SPEED * (SDL_randf() > 0.5f ? 1.0f : -1.0f) * ((float)M_PI / 180.0f);
+        new_ast->verts = 8 + SDL_rand(5);
+        for (int v = 0; v < AST_MAX_VERTS; v++) {
+            new_ast->vert_dist[v] = new_ast->radius * (0.7f + 0.6f * SDL_randf());
+            new_ast->vert_angle[v] = (int)((float)v / (float)new_ast->verts * 32.0f) * (float)M_PI / 16.0f;
+        }
+        new_ast->alive = true;
+        new_ast->points = asteroid_points_val(next_size);
+        game->ast_count++;
+    }
+    
+    /* Third split chance grows with level */
+    if (third_chance > 0 && game->ast_count < MAX_ASTEROIDS && SDL_rand(100) < third_chance) {
+        float perp = orig_angle + (SDL_randf() > 0.5f ? 1.0f : -1.0f) * 1.2f;
+        float spd = ASTEROID_BASE_SPEED * (1.0f + game->level * 0.1f) * (0.6f + 0.4f * SDL_randf());
+        
+        Asteroid *new_ast = &game->asteroids[game->ast_count];
+        new_ast->size = next_size;
+        new_ast->radius = asteroid_radius_val(next_size);
+        new_ast->pos = a->pos;
+        new_ast->vel = (vec2){ cosf(perp) * spd, sinf(perp) * spd };
         new_ast->angle = SDL_randf() * 2.0f * (float)M_PI;
         new_ast->rot_speed = ASTEROID_ROT_SPEED * (SDL_randf() > 0.5f ? 1.0f : -1.0f) * ((float)M_PI / 180.0f);
         new_ast->verts = 8 + SDL_rand(5);

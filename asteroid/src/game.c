@@ -1,5 +1,6 @@
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 #include "game.h"
 
 #ifndef M_PI
@@ -63,8 +64,43 @@ void game_update(Game *game, float dt) {
             
             /* Respawn ship when dead and invulnerability expired */
             if (!game->ship.alive && game->ship.invul_timer <= 0 && game->ship.lives > 0) {
+                float safe_dist = SIZE_LARGE + SHIP_RADIUS + 40.0f;
+                vec2 respawn = { W / 2.0f, H / 2.0f };
+                
+                /* Find a safe spot — no asteroids too close */
+                for (int pass = 0; pass < 3; pass++) {
+                    bool center_clear = true;
+                    float check_x = respawn.x;
+                    float check_y = respawn.y;
+                    if (pass == 0) {
+                        check_x = W / 2.0f;
+                        check_y = H / 2.0f;
+                    } else if (pass == 1) {
+                        check_x = W * 0.25f;
+                        check_y = H * 0.25f;
+                    } else {
+                        check_x = W * 0.75f;
+                        check_y = H * 0.75f;
+                    }
+                    for (int ai = 0; ai < game->ast_count; ai++) {
+                        Asteroid *a = &game->asteroids[ai];
+                        if (!a->alive) continue;
+                        float dx = a->pos.x - check_x;
+                        float dy = a->pos.y - check_y;
+                        if (sqrtf(dx * dx + dy * dy) < safe_dist) {
+                            center_clear = false;
+                            break;
+                        }
+                    }
+                    if (center_clear) {
+                        respawn.x = check_x;
+                        respawn.y = check_y;
+                        break;
+                    }
+                }
+                
                 game->ship.alive = true;
-                game->ship.pos = (vec2){ W / 2.0f, H / 2.0f };
+                game->ship.pos = respawn;
                 game->ship.vel = (vec2){ 0.0f, 0.0f };
                 game->ship.invul_timer = INVUL_TIME;
             }
@@ -111,9 +147,12 @@ void game_update(Game *game, float dt) {
                 game->level++;
                 sound_play(SFX_SHOOT);
                 ast_spawn_level(game, game->level);
-                game->state = GSTATE_PLAYING;
-                ship_init(game);
+                /* keep ship state as-is; just give invulnerability */
+                if (game->ship.alive) game->ship.invul_timer = INVUL_TIME;
                 game_clear_particles(game);
+                game->state = GSTATE_PLAYING;
+            } else if (game->level_trans_did_spawn) {
+                game->level_trans_did_spawn = false;
             }
             break;
             
