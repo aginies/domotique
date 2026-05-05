@@ -15,9 +15,13 @@ sensor = HCSR04(
 def show_distance_color(distance_cm):
     """
     Shows a color from green to red based on a distance in centimeters.
-    - Blinks green 3 times at 150cm.
-    - Fades from green to red between 150cm and 15cm.
-    - Blinks red continuously at 15cm.
+    - Off if distance > 190cm or < 6cm.
+    - Blinks green if between 151cm and 190cm.
+    - Fades green to red between 41cm and 150cm.
+    - Blinks blue if between 31cm and 40cm.
+    - Blinks violet if between 21cm and 30cm.
+    - Blinks red if between 11cm and 20cm.
+    - Blinks white if between 6cm and 10cm.
     """
     if distance_cm >= 191:
         e_l.internal_led_off()
@@ -38,23 +42,42 @@ def show_distance_color(distance_cm):
     elif distance_cm <= 5:
         e_l.internal_led_off()
 
+def get_smoothed_distance(readings):
+    """Calculates the average of the last few readings."""
+    if not readings:
+        return 0
+    return sum(readings) / len(readings)
+
 if __name__ == '__main__':
-    d_u.set_freq(160)
+    d_u.set_freq(80)  # 80MHz is enough for sensor reading and saves power
     e_l.french_flag()
     try:
         last_distance = -1
+        readings = []
+        MAX_READINGS = 5
+        
         while True:
             try:
-                current_distance = int(sensor.distance_cm())
+                distance = int(sensor.distance_cm())
+                readings.append(distance)
+                if len(readings) > MAX_READINGS:
+                    readings.pop(0)
+                
+                current_distance = int(get_smoothed_distance(readings))
+                
                 if current_distance != last_distance:
                     show_distance_color(current_distance)
                     last_distance = current_distance
-                time.sleep(0.01)
+                
+                # HC-SR04 needs at least 60ms between pings to avoid echo interference
+                time.sleep(0.1)
+                
             except OSError as ex:
-                print('ERROR getting distance:', ex)
+                d_u.print_and_store_log(f"ERROR getting distance: {ex}")
                 e_l.internal_led_off()
                 last_distance = -1
+                readings = []
 
     except KeyboardInterrupt:
         e_l.internal_led_off()
-        print("Program stopped.")
+        d_u.print_and_store_log("Program stopped.")
